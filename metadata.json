@@ -1,0 +1,6 @@
+{
+  "name": "Freelancer AI Copilot",
+  "description": "An AI-powered business copilot for freelancers to evaluate client project requests, check skill fulfillment, calculate pricing estimates, and generate professional responses.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
