@@ -53,3 +53,22 @@ export function isUsingMemoryDB(): boolean {
   return isInMemoryMode;
 }
 
+export function getDbStatus(): { connected: boolean; mode: 'mongodb' | 'memory' } {
+  return {
+    connected: isConnected,
+    mode: isInMemoryMode ? 'memory' : 'mongodb',
+  };
+}
+
+export async function disconnectDB(): Promise<void> {
+  if (mongoose.connection.readyState !== 0) {
+    try {
+      await mongoose.disconnect();
+    } catch {
+      // Ignore disconnection error
+    }
+  }
+  isConnected = false;
+}
+
+

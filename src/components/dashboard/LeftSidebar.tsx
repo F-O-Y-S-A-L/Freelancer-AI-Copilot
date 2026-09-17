@@ -213,8 +213,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               type="button"
               id="btn-upgrade-plan-sidebar"
               onClick={() => onSelectTab('billing')}
-              className="w-full mt-1 py-3 px-3 bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white font-bold text-sm rounded-lg shadow-xs shadow-violet-600/20 transition cursor-pointer flex items-center justify-center gap-1.5"
+              className="w-full mt-1 py-1.5 px-3 bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white font-bold text-xs rounded-lg shadow-xs shadow-violet-600/20 transition cursor-pointer flex items-center justify-center gap-1.5"
             >
+              <Zap className="w-3.5 h-3.5 fill-current" />
               <span>Upgrade Plan</span>
             </button>
           </div>

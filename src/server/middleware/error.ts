@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ENV } from '../config/env.js';
+import { logger } from '../utils/logger.js';
 
 export function errorHandler(
   err: any,
@@ -7,7 +8,7 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ): void {
-  console.error('[SERVER ERROR]:', err?.message || err);
+  logger.error(`Error on ${req.method} ${req.url}: ${err?.message || err}`, err);
 
   if (err?.name === 'GeminiQuotaExhaustedError' || err?.code === 'GEMINI_QUOTA_EXHAUSTED') {
     res.status(429).json({
@@ -38,12 +39,17 @@ export function errorHandler(
     return;
   }
 
-  const statusCode = err.statusCode || err.status || 500;
-  const message = err.message || 'An unexpected internal server error occurred';
+  const statusCode = Number(err.statusCode || err.status) || 500;
+  // In production, mask generic 500 errors so internal database or library errors are not leaked
+  const isProd = ENV.NODE_ENV === 'production';
+  const clientMessage = isProd && statusCode >= 500
+    ? 'An unexpected internal server error occurred. Please try again later.'
+    : err.message || 'An unexpected internal server error occurred';
 
   res.status(statusCode).json({
     success: false,
-    error: message,
-    stack: ENV.NODE_ENV === 'development' ? err.stack : undefined,
+    error: clientMessage,
+    ...(ENV.NODE_ENV === 'development' ? { stack: err.stack } : {}),
   });
 }
+

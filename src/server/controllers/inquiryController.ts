@@ -196,13 +196,25 @@ export async function getInquiries(
     const userId = req.userId;
 
     if (isUsingMemoryDB()) {
-      let userInquiries = memoryStore.inquiries.filter((inq) => inq.userId === userId);
+      let userInquiries = memoryStore.inquiries
+        .filter((inq) => inq.userId === userId)
+        .map((inq) => ({
+          ...inq,
+          starred: Boolean(inq.starred),
+        }));
       res.json({ success: true, data: userInquiries });
       return;
     }
 
     const inquiries = await Inquiry.find({ userId }).sort({ createdAt: -1 });
-    res.json({ success: true, data: inquiries });
+    const normalizedInquiries = inquiries.map((inq) => {
+      const obj = inq.toObject ? inq.toObject() : inq;
+      return {
+        ...obj,
+        starred: Boolean(obj.starred),
+      };
+    });
+    res.json({ success: true, data: normalizedInquiries });
   } catch (error) {
     next(error);
   }
@@ -356,6 +368,7 @@ export async function createInquiry(
         extractedMessageText: extractedMessageText || '',
         status: 'new',
         read: false,
+        starred: false,
         draft: '',
         selectedTone: 'friendly',
         analysisResult: null,
@@ -487,6 +500,7 @@ export async function createInquiry(
       extractedMessageText: extractedMessageText || '',
       status: 'new',
       read: false,
+      starred: false,
     });
 
     // Trigger New Inquiry Notification
@@ -519,7 +533,7 @@ export async function getInquiryById(
         res.status(404).json({ success: false, error: 'Inquiry not found' });
         return;
       }
-      res.json({ success: true, data: inq });
+      res.json({ success: true, data: { ...inq, starred: Boolean(inq.starred) } });
       return;
     }
 
@@ -529,7 +543,8 @@ export async function getInquiryById(
       return;
     }
 
-    res.json({ success: true, data: inquiry });
+    const inquiryObj = inquiry.toObject ? inquiry.toObject() : inquiry;
+    res.json({ success: true, data: { ...inquiryObj, starred: Boolean(inquiryObj.starred) } });
   } catch (error) {
     next(error);
   }
@@ -581,6 +596,11 @@ export async function updateInquiry(
         }
       }
 
+      if (updates.starred !== undefined) {
+        inq.starred = Boolean(updates.starred);
+        inq.starredAt = inq.starred ? (updates.starredAt || new Date().toISOString()) : undefined;
+      }
+
       Object.assign(inq, updates, { updatedAt: new Date().toISOString() });
 
       if (updates.read === true) {
@@ -610,6 +630,15 @@ export async function updateInquiry(
       updates.read = Boolean(updates.read);
       if (updates.read && !updates.readAt) {
         updates.readAt = new Date();
+      }
+    }
+
+    if (updates.starred !== undefined) {
+      updates.starred = Boolean(updates.starred);
+      if (updates.starred && !updates.starredAt) {
+        updates.starredAt = new Date();
+      } else if (!updates.starred) {
+        updates.starredAt = null;
       }
     }
 
@@ -660,7 +689,15 @@ export async function updateInquiry(
       );
     }
 
-    res.json({ success: true, message: 'Inquiry updated successfully', data: inquiry });
+    const inquiryObj = inquiry.toObject ? inquiry.toObject() : inquiry;
+    res.json({
+      success: true,
+      message: 'Inquiry updated successfully',
+      data: {
+        ...inquiryObj,
+        starred: Boolean(inquiryObj.starred),
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -756,6 +793,83 @@ export async function markInquiryAsRead(
       success: true,
       message: 'Inquiry marked as read',
       data: inquiry,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function toggleStarInquiry(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const userId = req.userId;
+    const { id } = req.params;
+    const { starred } = req.body;
+
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    if (isUsingMemoryDB()) {
+      const inq = memoryStore.inquiries.find(
+        (i) => (i.id === id || i._id === id) && i.userId === userId
+      );
+      if (!inq) {
+        res.status(404).json({ success: false, error: 'Inquiry not found' });
+        return;
+      }
+
+      const nextStarred = typeof starred === 'boolean' ? starred : !Boolean(inq.starred);
+      inq.starred = nextStarred;
+      inq.starredAt = nextStarred ? new Date().toISOString() : undefined;
+      inq.updatedAt = new Date().toISOString();
+
+      res.json({
+        success: true,
+        message: nextStarred ? 'Inquiry starred' : 'Inquiry unstarred',
+        data: {
+          ...inq,
+          starred: nextStarred,
+        },
+      });
+      return;
+    }
+
+    const existingDoc = await Inquiry.findOne({ _id: id, userId });
+    if (!existingDoc) {
+      res.status(404).json({ success: false, error: 'Inquiry not found' });
+      return;
+    }
+
+    const nextStarred = typeof starred === 'boolean' ? starred : !Boolean(existingDoc.starred);
+    const updatedDoc = await Inquiry.findOneAndUpdate(
+      { _id: id, userId },
+      {
+        $set: {
+          starred: nextStarred,
+          starredAt: nextStarred ? new Date() : null,
+        },
+      },
+      { new: true }
+    );
+
+    if (!updatedDoc) {
+      res.status(404).json({ success: false, error: 'Inquiry not found' });
+      return;
+    }
+
+    const updatedObj = updatedDoc.toObject ? updatedDoc.toObject() : updatedDoc;
+    res.json({
+      success: true,
+      message: nextStarred ? 'Inquiry starred' : 'Inquiry unstarred',
+      data: {
+        ...updatedObj,
+        starred: Boolean(updatedObj.starred),
+      },
     });
   } catch (error) {
     next(error);

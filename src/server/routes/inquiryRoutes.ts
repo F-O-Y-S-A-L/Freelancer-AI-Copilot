@@ -8,6 +8,7 @@ import {
   analyzeInquiry,
   generateInquiryReply,
   markInquiryAsRead,
+  toggleStarInquiry,
   translateInquiryAnalysis,
 } from '../controllers/inquiryController.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -23,6 +24,9 @@ router.put('/:id', authMiddleware, validateRequest(updateInquirySchema), updateI
 router.patch('/:id/read', authMiddleware, markInquiryAsRead);
 router.post('/:id/read', authMiddleware, markInquiryAsRead);
 router.put('/:id/read', authMiddleware, markInquiryAsRead);
+router.patch('/:id/star', authMiddleware, toggleStarInquiry);
+router.post('/:id/star', authMiddleware, toggleStarInquiry);
+router.put('/:id/star', authMiddleware, toggleStarInquiry);
 router.delete('/:id', authMiddleware, deleteInquiry);
 router.post('/:id/analyze', authMiddleware, analyzeInquiry);
 router.post('/:id/reply', authMiddleware, generateInquiryReply);

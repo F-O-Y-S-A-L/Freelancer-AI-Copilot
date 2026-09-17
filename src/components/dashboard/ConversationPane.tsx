@@ -199,6 +199,7 @@ export const ConversationPane: React.FC = () => {
     updateStatus,
     markAsReadAction,
     markAsUnreadAction,
+    toggleStarAction,
     deleteInquiry,
     generateReplyAction,
     sendReplyAction,
@@ -210,7 +211,6 @@ export const ConversationPane: React.FC = () => {
 
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
-  const [isStarred, setIsStarred] = useState<boolean>(false);
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   const [userTemplates, setUserTemplates] = useState<ITemplate[]>([]);
   const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState<boolean>(false);
@@ -219,6 +219,7 @@ export const ConversationPane: React.FC = () => {
   const lastActiveInquiryIdRef = React.useRef<string | null>(null);
 
   const activeInquiryId = activeInquiry ? activeInquiry.id || (activeInquiry as any)._id : null;
+  const isStarred = Boolean(activeInquiry?.starred);
 
   // Auto-mark conversation as read when opened and viewed by the user
   React.useEffect(() => {
@@ -469,13 +470,17 @@ export const ConversationPane: React.FC = () => {
         {/* Action Controls */}
         <div className="flex items-center space-x-1.5 shrink-0 relative">
           <button
-            onClick={() => setIsStarred(!isStarred)}
+            onClick={() => {
+              if (activeInquiryId) {
+                toggleStarAction(activeInquiryId);
+              }
+            }}
             className={`p-1.5 rounded-xl border transition cursor-pointer ${
               isStarred
                 ? "bg-amber-50 text-amber-500 border-amber-200"
                 : "text-slate-400 hover:text-slate-600 bg-slate-50 border-slate-200"
             }`}
-            title="Star Conversation"
+            title={isStarred ? "Unstar Conversation" : "Star Conversation"}
           >
             <Star className={`w-4 h-4 ${isStarred ? "fill-current" : ""}`} />
           </button>

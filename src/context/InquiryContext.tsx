@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { IInquiry, IInquiryAnalysis } from '../shared/types';
 import { api } from '../api/client';
 import { useAuth } from './AuthContext';
@@ -38,6 +38,7 @@ interface InquiryContextType {
   updateStatus: (status: 'new' | 'analyzed' | 'replied' | 'converted' | 'declined' | 'archived') => Promise<boolean>;
   markAsReadAction: (id?: string) => Promise<boolean>;
   markAsUnreadAction: (id?: string) => Promise<boolean>;
+  toggleStarAction: (id?: string, targetStarred?: boolean) => Promise<boolean>;
   deleteInquiry: (id: string) => Promise<boolean>;
   analyzeInquiryAction: (
     id?: string,
@@ -308,6 +309,92 @@ export const InquiryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return false;
   }, [activeInquiry]);
 
+  const inFlightStarMapRef = useRef<Map<string, boolean>>(new Map());
+
+  const toggleStarAction = useCallback(
+    async (id?: string, targetStarred?: boolean): Promise<boolean> => {
+      const targetId = id || (activeInquiry ? activeInquiry.id || (activeInquiry as any)._id : null);
+      if (!targetId) return false;
+
+      // Prevent race conditions on rapid clicks
+      if (inFlightStarMapRef.current.get(targetId)) {
+        return false;
+      }
+      inFlightStarMapRef.current.set(targetId, true);
+
+      // Determine current and next state
+      const currentInquiry =
+        inquiries.find((item) => (item.id || (item as any)._id) === targetId) ||
+        activeInquiry;
+
+      const currentStarred = Boolean(currentInquiry?.starred);
+      const nextStarred = typeof targetStarred === 'boolean' ? targetStarred : !currentStarred;
+
+      // Optimistic update
+      setActiveInquiry((prev) => {
+        if (prev && (prev.id || (prev as any)._id) === targetId) {
+          return { ...prev, starred: nextStarred };
+        }
+        return prev;
+      });
+
+      setInquiries((prev) =>
+        prev.map((item) =>
+          (item.id || (item as any)._id) === targetId
+            ? { ...item, starred: nextStarred }
+            : item
+        )
+      );
+
+      try {
+        const res = await api.toggleStarInquiry(targetId, nextStarred);
+        if (res.success && res.data) {
+          const updated = res.data;
+          const authoritativeStarred = Boolean(updated.starred);
+
+          setActiveInquiry((prev) => {
+            if (prev && (prev.id || (prev as any)._id) === targetId) {
+              return { ...prev, ...updated, starred: authoritativeStarred };
+            }
+            return prev;
+          });
+
+          setInquiries((prev) =>
+            prev.map((item) =>
+              (item.id || (item as any)._id) === targetId
+                ? { ...item, ...updated, starred: authoritativeStarred }
+                : item
+            )
+          );
+          return true;
+        } else {
+          throw new Error(res.error || 'Failed to toggle star status');
+        }
+      } catch (err) {
+        console.error('Failed to toggle star on inquiry:', err);
+        // Rollback optimistic state
+        setActiveInquiry((prev) => {
+          if (prev && (prev.id || (prev as any)._id) === targetId) {
+            return { ...prev, starred: currentStarred };
+          }
+          return prev;
+        });
+
+        setInquiries((prev) =>
+          prev.map((item) =>
+            (item.id || (item as any)._id) === targetId
+              ? { ...item, starred: currentStarred }
+              : item
+          )
+        );
+        return false;
+      } finally {
+        inFlightStarMapRef.current.delete(targetId);
+      }
+    },
+    [activeInquiry, inquiries]
+  );
+
   const deleteInquiry = async (id: string): Promise<boolean> => {
     const res = await api.deleteInquiry(id);
     if (res.success) {
@@ -525,6 +612,7 @@ export const InquiryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updateStatus,
         markAsReadAction,
         markAsUnreadAction,
+        toggleStarAction,
         deleteInquiry,
         analyzeInquiryAction,
         generateReplyAction,

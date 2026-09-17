@@ -85,6 +85,8 @@ export const updateInquirySchema = baseInquirySchema.partial().extend({
   status: z.enum(['new', 'analyzed', 'replied', 'converted', 'declined', 'archived']).optional(),
   read: z.boolean().optional(),
   readAt: z.union([z.string(), z.date()]).optional(),
+  starred: z.boolean().optional(),
+  starredAt: z.union([z.string(), z.date()]).optional(),
   draft: z.string().optional(),
   sentReply: z.string().optional(),
   selectedTone: z.enum(['friendly', 'formal', 'concise', 'detailed']).optional(),

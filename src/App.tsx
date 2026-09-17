@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense, lazy } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { InquiryProvider, useInquiry } from "./context/InquiryContext";
 import { NotificationProvider } from "./context/NotificationContext";
@@ -6,18 +6,9 @@ import { ToastProvider, useToast } from "./context/ToastContext";
 import { api } from "./api/client";
 import { IUserProfile, DEFAULT_AVATAR } from "./shared/types";
 import { PRO_PLAN_AI_CREDITS_LIMIT } from "./shared/planConfig";
-import { KnowledgeBaseEditor } from "./components/KnowledgeBaseEditor";
-import { OnboardingWizard } from "./components/OnboardingWizard";
 import { LeftSidebar } from "./components/dashboard/LeftSidebar";
-import { InquiryWorkspace } from "./components/dashboard/InquiryWorkspace";
-import { AnalyticsDashboard } from "./components/dashboard/AnalyticsDashboard";
 import { NotificationDropdown } from "./components/dashboard/NotificationDropdown";
-import { SettingsPage } from "./components/settings/SettingsPage";
-import { PlansBillingPage } from "./components/billing/PlansBillingPage";
-import { AITemplatesPage } from "./components/templates/AITemplatesPage";
-import { FollowUpsPage } from "./components/followups/FollowUpsPage";
 import { FollowUpProvider } from "./context/FollowUpContext";
-import { AuthPage } from "./components/auth/AuthPage";
 import {
   Sparkles,
   RefreshCw,
@@ -26,6 +17,64 @@ import {
   ChevronDown,
   BookOpen,
 } from "lucide-react";
+
+// Code-splitting page-level routes and modules for optimal production bundle size
+const KnowledgeBaseEditor = lazy(() =>
+  import("./components/KnowledgeBaseEditor").then((m) => ({
+    default: m.KnowledgeBaseEditor,
+  }))
+);
+const OnboardingWizard = lazy(() =>
+  import("./components/OnboardingWizard").then((m) => ({
+    default: m.OnboardingWizard,
+  }))
+);
+const InquiryWorkspace = lazy(() =>
+  import("./components/dashboard/InquiryWorkspace").then((m) => ({
+    default: m.InquiryWorkspace,
+  }))
+);
+const AnalyticsDashboard = lazy(() =>
+  import("./components/dashboard/AnalyticsDashboard").then((m) => ({
+    default: m.AnalyticsDashboard,
+  }))
+);
+const SettingsPage = lazy(() =>
+  import("./components/settings/SettingsPage").then((m) => ({
+    default: m.SettingsPage,
+  }))
+);
+const PlansBillingPage = lazy(() =>
+  import("./components/billing/PlansBillingPage").then((m) => ({
+    default: m.PlansBillingPage,
+  }))
+);
+const AITemplatesPage = lazy(() =>
+  import("./components/templates/AITemplatesPage").then((m) => ({
+    default: m.AITemplatesPage,
+  }))
+);
+const FollowUpsPage = lazy(() =>
+  import("./components/followups/FollowUpsPage").then((m) => ({
+    default: m.FollowUpsPage,
+  }))
+);
+const AuthPage = lazy(() =>
+  import("./components/auth/AuthPage").then((m) => ({
+    default: m.AuthPage,
+  }))
+);
+
+function TabLoadingFallback() {
+  return (
+    <div className="flex-1 flex items-center justify-center p-12 text-slate-500">
+      <div className="flex flex-col items-center space-y-3">
+        <RefreshCw className="w-6 h-6 animate-spin text-violet-600" />
+        <span className="text-xs font-semibold text-slate-500">Loading module...</span>
+      </div>
+    </div>
+  );
+}
 
 function AuthenticatedWorkspace() {
   const { user, logout, updateUser } = useAuth();
@@ -332,100 +381,102 @@ function AuthenticatedWorkspace() {
 
         {/* Main Content Area */}
         <div className="flex-1 h-full overflow-hidden flex flex-col bg-[#F8FAFC]">
-          {/* Onboarding View */}
-          {(activeTab === "onboarding" || showOnboarding) && profile && (
-            <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
-              <OnboardingWizard
-                initialProfile={profile}
-                onSaveStep={handleSaveProfile}
-                onComplete={handleCompleteOnboarding}
-                onSkip={() => {
-                  setShowOnboarding(false);
+          <Suspense fallback={<TabLoadingFallback />}>
+            {/* Onboarding View */}
+            {(activeTab === "onboarding" || showOnboarding) && profile && (
+              <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
+                <OnboardingWizard
+                  initialProfile={profile}
+                  onSaveStep={handleSaveProfile}
+                  onComplete={handleCompleteOnboarding}
+                  onSkip={() => {
+                    setShowOnboarding(false);
+                    handleNavigateTab("inquiries");
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Tab 1: 3-Pane Inquiry Workspace */}
+            {!showOnboarding && activeTab === "inquiries" && <InquiryWorkspace />}
+
+            {/* Tab 2: AI Templates */}
+            {!showOnboarding && activeTab === "templates" && (
+              <AITemplatesPage
+                onUseTemplate={() => {
                   handleNavigateTab("inquiries");
                 }}
+                onNavigateTab={handleNavigateTab}
               />
-            </div>
-          )}
+            )}
 
-          {/* Tab 1: 3-Pane Inquiry Workspace */}
-          {!showOnboarding && activeTab === "inquiries" && <InquiryWorkspace />}
-
-          {/* Tab 2: AI Templates */}
-          {!showOnboarding && activeTab === "templates" && (
-            <AITemplatesPage
-              onUseTemplate={() => {
-                handleNavigateTab("inquiries");
-              }}
-              onNavigateTab={handleNavigateTab}
-            />
-          )}
-
-          {/* Tab 3: Knowledge Base Editor */}
-          {!showOnboarding && activeTab === "knowledge" && (
-            <div className="flex-1 overflow-y-auto p-6 max-w-6xl mx-auto w-full space-y-4">
-              <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-violet-600" />
-                    Knowledge Base & Rule Parameters
-                  </h2>
-                  <p className="text-[11px] text-slate-500">
-                    Configure tech stack, out-of-scope services, base pricing,
-                    and reply tone.
-                  </p>
+            {/* Tab 3: Knowledge Base Editor */}
+            {!showOnboarding && activeTab === "knowledge" && (
+              <div className="flex-1 overflow-y-auto p-6 max-w-6xl mx-auto w-full space-y-4">
+                <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-violet-600" />
+                      Knowledge Base & Rule Parameters
+                    </h2>
+                    <p className="text-[11px] text-slate-500">
+                      Configure tech stack, out-of-scope services, base pricing,
+                      and reply tone.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowOnboarding(true)}
+                    className="px-3.5 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-violet-600" />
+                    Launch Setup Wizard
+                  </button>
                 </div>
-                <button
-                  onClick={() => setShowOnboarding(true)}
-                  className="px-3.5 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-violet-600" />
-                  Launch Setup Wizard
-                </button>
+
+                {profile ? (
+                  <KnowledgeBaseEditor
+                    initialProfile={profile}
+                    onSave={handleSaveProfile}
+                    isSaving={isSavingProfile}
+                  />
+                ) : (
+                  <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center space-y-3">
+                    <RefreshCw className="w-6 h-6 animate-spin text-violet-600" />
+                    <span>Loading Knowledge Base Profile...</span>
+                  </div>
+                )}
               </div>
+            )}
 
-              {profile ? (
-                <KnowledgeBaseEditor
-                  initialProfile={profile}
-                  onSave={handleSaveProfile}
-                  isSaving={isSavingProfile}
-                />
-              ) : (
-                <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center space-y-3">
-                  <RefreshCw className="w-6 h-6 animate-spin text-violet-600" />
-                  <span>Loading Knowledge Base Profile...</span>
-                </div>
-              )}
-            </div>
-          )}
+            {/* Tab 2: Follow-up Messages Management */}
+            {!showOnboarding && activeTab === "followups" && (
+              <FollowUpsPage onSelectInquiry={handleNotificationSelectInquiry} />
+            )}
 
-          {/* Tab 2: Follow-up Messages Management */}
-          {!showOnboarding && activeTab === "followups" && (
-            <FollowUpsPage onSelectInquiry={handleNotificationSelectInquiry} />
-          )}
+            {/* Tab 4: Analytics Summary */}
+            {!showOnboarding && activeTab === "analytics" && (
+              <AnalyticsDashboard onNavigateTab={handleNavigateTab} />
+            )}
 
-          {/* Tab 4: Analytics Summary */}
-          {!showOnboarding && activeTab === "analytics" && (
-            <AnalyticsDashboard onNavigateTab={handleNavigateTab} />
-          )}
+            {/* Tab 5: Settings & Account Information */}
+            {!showOnboarding && activeTab === "settings" && (
+              <SettingsPage
+                user={user}
+                profile={profile}
+                onSaveProfile={handleSaveProfile}
+                onAvatarUpload={handleAvatarUpload}
+                onResetAvatar={handleResetAvatar}
+                isUploadingAvatar={isUploadingAvatar}
+                onLogout={logout}
+                onNavigateTab={handleNavigateTab}
+              />
+            )}
 
-          {/* Tab 5: Settings & Account Information */}
-          {!showOnboarding && activeTab === "settings" && (
-            <SettingsPage
-              user={user}
-              profile={profile}
-              onSaveProfile={handleSaveProfile}
-              onAvatarUpload={handleAvatarUpload}
-              onResetAvatar={handleResetAvatar}
-              isUploadingAvatar={isUploadingAvatar}
-              onLogout={logout}
-              onNavigateTab={handleNavigateTab}
-            />
-          )}
-
-          {/* Tab 6: Plans & Billing */}
-          {!showOnboarding && activeTab === "billing" && (
-            <PlansBillingPage onNavigateTab={handleNavigateTab} />
-          )}
+            {/* Tab 6: Plans & Billing */}
+            {!showOnboarding && activeTab === "billing" && (
+              <PlansBillingPage onNavigateTab={handleNavigateTab} />
+            )}
+          </Suspense>
         </div>
       </div>
     </div>
@@ -463,7 +514,25 @@ function MainAppContent() {
     );
   }
 
-  return <AuthPage />;
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex items-center justify-center p-6 font-sans antialiased">
+          <div className="flex flex-col items-center space-y-3 p-6 bg-white border border-slate-200/90 rounded-2xl shadow-xl shadow-slate-200/50">
+            <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center text-white shadow-xs shadow-violet-600/30">
+              <Sparkles className="w-5 h-5 fill-current animate-pulse" />
+            </div>
+            <div className="flex items-center space-x-2 text-xs font-semibold text-slate-600">
+              <RefreshCw className="w-4 h-4 animate-spin text-violet-600" />
+              <span>Loading...</span>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <AuthPage />
+    </Suspense>
+  );
 }
 
 export default function App() {

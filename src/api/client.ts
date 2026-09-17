@@ -1,6 +1,7 @@
 import { IAuthResponse, IUser, IUserProfile, ITemplate, IInquiry, IInquiryAnalysis, INotification, IApiResponse, IAnalyticsData, IUsageData, IFollowUp, IFollowUpSummary } from '../shared/types';
 
 const TOKEN_KEY = 'freelancer_copilot_token';
+const REFRESH_TOKEN_KEY = 'freelancer_copilot_refresh_token';
 
 export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -14,8 +15,51 @@ export function removeStoredToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+export function getStoredRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+export function setStoredRefreshToken(refreshToken: string): void {
+  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+}
+
+export function removeStoredRefreshToken(): void {
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+let isRefreshing = false;
+let refreshSubscribers: ((newToken: string | null) => void)[] = [];
+
+function onRefreshed(newToken: string | null) {
+  refreshSubscribers.forEach((cb) => cb(newToken));
+  refreshSubscribers = [];
+}
+
+async function trySilentRefresh(): Promise<string | null> {
+  const currentRefreshToken = getStoredRefreshToken();
+  try {
+    const res = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: currentRefreshToken || undefined }),
+    });
+    const data = await res.json();
+    if (res.ok && data.success && data.data?.token) {
+      const newAccessToken = data.data.token;
+      setStoredToken(newAccessToken);
+      if (data.data.refreshToken) {
+        setStoredRefreshToken(data.data.refreshToken);
+      }
+      return newAccessToken;
+    }
+  } catch {
+    // Refresh failed
+  }
+  return null;
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<IApiResponse<T>> {
-  const token = getStoredToken();
+  let token = getStoredToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
@@ -26,10 +70,45 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 
   try {
-    const response = await fetch(endpoint, {
+    let response = await fetch(endpoint, {
       ...options,
       headers,
     });
+
+    // Handle expired token with silent refresh (except for auth routes)
+    if (
+      response.status === 401 &&
+      !endpoint.includes('/api/auth/login') &&
+      !endpoint.includes('/api/auth/register') &&
+      !endpoint.includes('/api/auth/refresh')
+    ) {
+      if (!isRefreshing) {
+        isRefreshing = true;
+        const newToken = await trySilentRefresh();
+        isRefreshing = false;
+        onRefreshed(newToken);
+
+        if (newToken) {
+          headers['Authorization'] = `Bearer ${newToken}`;
+          response = await fetch(endpoint, {
+            ...options,
+            headers,
+          });
+        }
+      } else {
+        // Wait for active refresh
+        const refreshedToken = await new Promise<string | null>((resolve) => {
+          refreshSubscribers.push(resolve);
+        });
+        if (refreshedToken) {
+          headers['Authorization'] = `Bearer ${refreshedToken}`;
+          response = await fetch(endpoint, {
+            ...options,
+            headers,
+          });
+        }
+      }
+    }
 
     const data = await response.json();
 
@@ -62,6 +141,18 @@ export const api = {
     request<IAuthResponse>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
+    }),
+
+  refreshToken: (payload?: { refreshToken?: string }) =>
+    request<{ token: string; accessToken: string; refreshToken: string }>('/api/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify(payload || { refreshToken: getStoredRefreshToken() || undefined }),
+    }),
+
+  logout: () =>
+    request<{ success: boolean; message: string }>('/api/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken: getStoredRefreshToken() || undefined }),
     }),
 
   getMe: () => request<IUser>('/api/auth/me'),
@@ -133,6 +224,12 @@ export const api = {
   markInquiryAsRead: (id: string) =>
     request<IInquiry>('/api/inquiries/' + id + '/read', {
       method: 'PATCH',
+    }),
+
+  toggleStarInquiry: (id: string, starred?: boolean) =>
+    request<IInquiry>('/api/inquiries/' + id + '/star', {
+      method: 'PATCH',
+      body: JSON.stringify(typeof starred === 'boolean' ? { starred } : {}),
     }),
 
   deleteInquiry: (id: string) =>

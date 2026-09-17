@@ -17,6 +17,8 @@ export interface IInquiryDocument extends Document {
   status: 'new' | 'analyzed' | 'replied' | 'converted' | 'declined' | 'archived';
   read: boolean;
   readAt?: Date;
+  starred: boolean;
+  starredAt?: Date;
   draft?: string;
   sentReply?: string;
   selectedTone?: 'friendly' | 'formal' | 'concise' | 'detailed';
@@ -102,6 +104,14 @@ const InquirySchema = new Schema<IInquiryDocument>(
     readAt: {
       type: Date,
     },
+    starred: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    starredAt: {
+      type: Date,
+    },
     draft: {
       type: String,
       default: '',
@@ -136,6 +146,7 @@ const InquirySchema = new Schema<IInquiryDocument>(
 // Compound indexes for tenant isolation, deduplication, and queries
 InquirySchema.index({ userId: 1, status: 1 });
 InquirySchema.index({ userId: 1, read: 1 });
+InquirySchema.index({ userId: 1, starred: 1 });
 InquirySchema.index({ userId: 1, createdAt: -1 });
 InquirySchema.index({ userId: 1, clientId: 1, subject: 1 });
 InquirySchema.index({ userId: 1, clientEmail: 1, subject: 1 });

@@ -7,6 +7,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Sparkles,
+  Star,
 } from 'lucide-react';
 import { useInquiry } from '../../context/InquiryContext';
 import { IInquiry } from '../../shared/types';
@@ -360,6 +361,9 @@ export const InquiryListPane: React.FC<InquiryListPaneProps> = ({ onOpenNewModal
                       <span className="text-xs font-bold text-slate-900 truncate">
                         {inquiry.clientName}
                       </span>
+                      {Boolean(inquiry.starred) && (
+                        <Star className="w-3 h-3 text-amber-500 fill-amber-400 shrink-0" />
+                      )}
                       <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200/60 shrink-0">
                         {inquiry.sourceChannel || 'Fiverr'}
                       </span>

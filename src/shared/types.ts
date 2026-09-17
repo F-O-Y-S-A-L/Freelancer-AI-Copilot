@@ -172,6 +172,8 @@ export interface IInquiry {
   status: 'new' | 'analyzed' | 'replied' | 'converted' | 'declined' | 'archived';
   read?: boolean;
   readAt?: string;
+  starred?: boolean;
+  starredAt?: string;
   draft?: string;
   sentReply?: string;
   selectedTone?: 'friendly' | 'formal' | 'concise' | 'detailed';
@@ -185,6 +187,7 @@ export interface IInquiry {
 export interface IAuthResponse {
   user: IUser;
   token: string;
+  refreshToken?: string;
 }
 
 export interface IAnalyticsData {
