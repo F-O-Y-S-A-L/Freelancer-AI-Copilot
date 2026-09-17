@@ -64,6 +64,11 @@ const AuthPage = lazy(() =>
     default: m.AuthPage,
   }))
 );
+const PublicWebsite = lazy(() =>
+  import("./components/public/PublicWebsite").then((m) => ({
+    default: m.PublicWebsite,
+  }))
+);
 
 function TabLoadingFallback() {
   return (
@@ -101,10 +106,10 @@ function AuthenticatedWorkspace() {
   // Synchronize path routing
   useEffect(() => {
     const handlePopState = () => {
-      const path = window.location.pathname;
+      const path = window.location.pathname.toLowerCase();
       if (path.includes("/app/templates")) setActiveTab("templates");
-      else if (path.includes("/app/followups")) setActiveTab("followups");
-      else if (path.includes("/app/knowledge-base")) setActiveTab("knowledge");
+      else if (path.includes("/app/followups") || path.includes("/app/follow-ups")) setActiveTab("followups");
+      else if (path.includes("/app/knowledge-base") || path.includes("/app/knowledge")) setActiveTab("knowledge");
       else if (path.includes("/app/analytics")) setActiveTab("analytics");
       else if (path.includes("/app/settings")) setActiveTab("settings");
       else if (path.includes("/app/billing") || path.includes("/app/plans")) setActiveTab("billing");
@@ -131,8 +136,8 @@ function AuthenticatedWorkspace() {
     setActiveTab(tab);
     let path = "/app/inquiries";
     if (tab === "templates") path = "/app/templates";
-    else if (tab === "followups") path = "/app/followups";
-    else if (tab === "knowledge") path = "/app/knowledge-base";
+    else if (tab === "followups") path = "/app/follow-ups";
+    else if (tab === "knowledge") path = "/app/knowledge";
     else if (tab === "analytics") path = "/app/analytics";
     else if (tab === "settings") path = "/app/settings";
     else if (tab === "billing") path = "/app/billing";
@@ -485,6 +490,25 @@ function AuthenticatedWorkspace() {
 
 function MainAppContent() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [currentPath, setCurrentPath] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return window.location.pathname || "/";
+    }
+    return "/";
+  });
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPath(window.location.pathname || "/");
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  const handleNavigate = (path: string) => {
+    window.history.pushState(null, "", path);
+    setCurrentPath(path);
+  };
 
   if (isLoading) {
     return (
@@ -502,36 +526,73 @@ function MainAppContent() {
     );
   }
 
-  if (isAuthenticated) {
+  const normalized = currentPath.toLowerCase().replace(/\/+$/, "") || "/";
+  const isAuthRoute =
+    normalized === "/login" || normalized === "/signup" || normalized === "/register";
+  const isProtectedRoute =
+    normalized === "/app" || normalized.startsWith("/app/") || normalized === "/onboarding";
+  const isPublicRoute =
+    normalized === "/" ||
+    normalized === "/features" ||
+    normalized === "/pricing" ||
+    normalized === "/about" ||
+    normalized === "/faq";
+
+  // Case 1: Unauthenticated visitors
+  if (!isAuthenticated) {
+    if (isProtectedRoute) {
+      // Direct access to protected /app/* routes -> redirect to /login
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        window.history.replaceState(null, "", "/login");
+      }
+      return (
+        <Suspense fallback={<TabLoadingFallback />}>
+          <AuthPage initialMode="login" onNavigate={handleNavigate} />
+        </Suspense>
+      );
+    }
+
+    if (isAuthRoute) {
+      const mode = normalized.includes("signup") || normalized.includes("register") ? "signup" : "login";
+      return (
+        <Suspense fallback={<TabLoadingFallback />}>
+          <AuthPage initialMode={mode} onNavigate={handleNavigate} />
+        </Suspense>
+      );
+    }
+
+    // Default to Public Website
     return (
-      <InquiryProvider>
-        <NotificationProvider>
-          <FollowUpProvider>
-            <AuthenticatedWorkspace />
-          </FollowUpProvider>
-        </NotificationProvider>
-      </InquiryProvider>
+      <Suspense fallback={<TabLoadingFallback />}>
+        <PublicWebsite currentPath={currentPath} onNavigate={handleNavigate} />
+      </Suspense>
     );
   }
 
+  // Case 2: Authenticated visitors
+  if (isAuthRoute) {
+    // Authenticated user visits /login or /signup -> redirect to /app/inquiries
+    if (typeof window !== "undefined" && window.location.pathname !== "/app/inquiries") {
+      window.history.replaceState(null, "", "/app/inquiries");
+    }
+  } else if (isPublicRoute && normalized !== "/app") {
+    // Authenticated user browsing the public marketing website
+    return (
+      <Suspense fallback={<TabLoadingFallback />}>
+        <PublicWebsite currentPath={currentPath} onNavigate={handleNavigate} />
+      </Suspense>
+    );
+  }
+
+  // Authenticated workspace
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex items-center justify-center p-6 font-sans antialiased">
-          <div className="flex flex-col items-center space-y-3 p-6 bg-white border border-slate-200/90 rounded-2xl shadow-xl shadow-slate-200/50">
-            <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center text-white shadow-xs shadow-violet-600/30">
-              <Sparkles className="w-5 h-5 fill-current animate-pulse" />
-            </div>
-            <div className="flex items-center space-x-2 text-xs font-semibold text-slate-600">
-              <RefreshCw className="w-4 h-4 animate-spin text-violet-600" />
-              <span>Loading...</span>
-            </div>
-          </div>
-        </div>
-      }
-    >
-      <AuthPage />
-    </Suspense>
+    <InquiryProvider>
+      <NotificationProvider>
+        <FollowUpProvider>
+          <AuthenticatedWorkspace />
+        </FollowUpProvider>
+      </NotificationProvider>
+    </InquiryProvider>
   );
 }
 
