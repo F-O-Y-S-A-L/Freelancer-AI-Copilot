@@ -1,10 +1,16 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { IUserProfile, IServiceItem, IPricingRule, DEFAULT_AVATAR } from '../../shared/types.js';
+import mongoose, { Schema, Document } from "mongoose";
+import {
+  IUserProfile,
+  IServiceItem,
+  IPricingRule,
+  DEFAULT_AVATAR,
+} from "../../shared/types.js";
 
 export type IServiceSchema = IServiceItem;
 export type IPricingRuleSchema = IPricingRule;
 
-export interface IUserProfileDocument extends Omit<IUserProfile, 'id' | '_id' | 'userId'>, Document {
+export interface IUserProfileDocument
+  extends Omit<IUserProfile, "id" | "_id" | "userId">, Document {
   userId: any;
 }
 
@@ -12,18 +18,18 @@ const ServiceItemSchema = new Schema<IServiceItem>(
   {
     id: { type: String },
     name: { type: String, required: true },
-    description: { type: String, default: '' },
+    description: { type: String, default: "" },
     basePrice: { type: Number, required: true, default: 0 },
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: "USD" },
     pricingModel: {
       type: String,
-      enum: ['fixed', 'hourly', 'starting_at', 'custom'],
-      default: 'fixed',
+      enum: ["fixed", "hourly", "starting_at", "custom"],
+      default: "fixed",
     },
     deliveryDays: { type: Number, default: 3 },
     deliverables: [{ type: String }],
   },
-  { _id: false }
+  { _id: false },
 );
 
 const UserProfileSchema = new Schema<IUserProfileDocument>(
@@ -36,19 +42,19 @@ const UserProfileSchema = new Schema<IUserProfileDocument>(
     },
     profession: {
       type: String,
-      default: '',
+      default: "",
     },
     professions: [{ type: String }],
     categories: [{ type: String }],
     specializations: [{ type: String }],
     experienceLevel: {
       type: String,
-      enum: ['junior', 'mid', 'senior', 'expert'],
-      default: 'mid',
+      enum: ["junior", "mid", "senior", "expert"],
+      default: "mid",
     },
     bio: {
       type: String,
-      default: '',
+      default: "",
     },
     avatar: {
       type: String,
@@ -65,7 +71,7 @@ const UserProfileSchema = new Schema<IUserProfileDocument>(
         minProjectPrice: 0,
         hourlyRate: 0,
         rushOrderMultiplier: 1.0,
-        currency: 'USD',
+        currency: "USD",
       }),
     },
     businessRules: [{ type: String }],
@@ -79,8 +85,8 @@ const UserProfileSchema = new Schema<IUserProfileDocument>(
     },
     communicationTone: {
       type: String,
-      enum: ['formal', 'friendly', 'concise', 'detailed'],
-      default: 'friendly',
+      enum: ["formal", "friendly", "concise", "detailed"],
+      default: "friendly",
     },
     followUpThresholdDays: {
       type: Number,
@@ -91,10 +97,11 @@ const UserProfileSchema = new Schema<IUserProfileDocument>(
   },
   {
     timestamps: true,
-  }
+    bufferCommands: false,
+  },
 );
 
 export const UserProfile = mongoose.model<IUserProfileDocument>(
-  'UserProfile',
-  UserProfileSchema
+  "UserProfile",
+  UserProfileSchema,
 );

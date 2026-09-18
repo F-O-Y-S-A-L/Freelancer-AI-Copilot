@@ -28,6 +28,11 @@ export async function connectDB(): Promise<void> {
       await mongoose.connect(ENV.MONGODB_URI, {
         serverSelectionTimeoutMS: 5000,
       });
+      if (mongoose.connection.readyState !== 1) {
+        throw new Error(
+          "MongoDB connection did not reach the connected state.",
+        );
+      }
       isConnected = true;
       isInMemoryMode = false;
       console.log("MongoDB connected successfully via Mongoose.");

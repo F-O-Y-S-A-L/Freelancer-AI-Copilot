@@ -89,7 +89,8 @@ var init_User = __esm({
         }
       },
       {
-        timestamps: true
+        timestamps: true,
+        bufferCommands: false
       }
     );
     User = import_mongoose.default.model("User", UserSchema);
@@ -126,7 +127,9 @@ var resolvedFallback = isDeprecatedFallback ? "gemini-3.7-flash" : rawFallback;
 var nodeEnv = process.env.NODE_ENV || "development";
 var DEV_INSECURE_JWT_SECRET = "super-secret-jwt-key-change-in-production-12345";
 var mongodbUri = (process.env.MONGODB_URI || "").trim();
-if (nodeEnv === "production" && (!mongodbUri || /mongodb(?:\+srv)?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\b/i.test(mongodbUri))) {
+if (nodeEnv === "production" && (!mongodbUri || /mongodb(?:\+srv)?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\b/i.test(
+  mongodbUri
+))) {
   throw new Error(
     "FATAL CONFIGURATION ERROR: MONGODB_URI must be set to a reachable MongoDB Atlas URI in production."
   );
@@ -384,6 +387,9 @@ async function connectDB() {
       await import_mongoose2.default.connect(ENV.MONGODB_URI, {
         serverSelectionTimeoutMS: 5e3
       });
+      if (import_mongoose2.default.connection.readyState !== 1) {
+        throw new Error("MongoDB connection did not reach the connected state.");
+      }
       isConnected = true;
       isInMemoryMode = false;
       console.log("MongoDB connected successfully via Mongoose.");
@@ -521,7 +527,8 @@ var UserProfileSchema = new import_mongoose3.Schema(
     }
   },
   {
-    timestamps: true
+    timestamps: true,
+    bufferCommands: false
   }
 );
 var UserProfile = import_mongoose3.default.model(

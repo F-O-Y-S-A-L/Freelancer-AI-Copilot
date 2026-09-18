@@ -1,12 +1,12 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { PRO_PLAN_AI_CREDITS_LIMIT } from '../../shared/planConfig.js';
-import { DEFAULT_AVATAR } from '../../shared/types.js';
+import mongoose, { Schema, Document } from "mongoose";
+import { PRO_PLAN_AI_CREDITS_LIMIT } from "../../shared/planConfig.js";
+import { DEFAULT_AVATAR } from "../../shared/types.js";
 
 export interface IUserDocument extends Document {
   email: string;
   passwordHash: string;
   name: string;
-  role: 'freelancer' | 'admin';
+  role: "freelancer" | "admin";
   avatar?: string;
   aiCreditsRemaining: number;
   createdAt: Date;
@@ -34,8 +34,8 @@ const UserSchema = new Schema<IUserDocument>(
     },
     role: {
       type: String,
-      enum: ['freelancer', 'admin'],
-      default: 'freelancer',
+      enum: ["freelancer", "admin"],
+      default: "freelancer",
     },
     avatar: {
       type: String,
@@ -48,7 +48,8 @@ const UserSchema = new Schema<IUserDocument>(
   },
   {
     timestamps: true,
-  }
+    bufferCommands: false,
+  },
 );
 
-export const User = mongoose.model<IUserDocument>('User', UserSchema);
+export const User = mongoose.model<IUserDocument>("User", UserSchema);
