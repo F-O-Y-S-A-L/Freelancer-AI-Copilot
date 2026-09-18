@@ -10,7 +10,7 @@ async function startServer() {
   await connectDB();
 
   const app = createApp();
-  const PORT = ENV.PORT || 3000;
+  const PORT = 3000;
 
   if (ENV.NODE_ENV !== 'production') {
     const vite = await createViteServer({
