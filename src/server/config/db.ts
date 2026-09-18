@@ -4,6 +4,7 @@ import { PRO_PLAN_AI_CREDITS_LIMIT } from "../../shared/planConfig.js";
 
 let isConnected = false;
 let isInMemoryMode = false;
+let connectionPromise: Promise<void> | null = null;
 
 // Memory storage fallback when local Mongo daemon is unavailable
 export const memoryStore = {
@@ -17,39 +18,45 @@ export const memoryStore = {
 };
 
 export async function connectDB(): Promise<void> {
-  if (isConnected) return;
+  if (mongoose.connection.readyState === 1 && isConnected) return;
+  if (connectionPromise) return connectionPromise;
 
-  try {
-    mongoose.set("strictQuery", true);
-    await mongoose.connect(ENV.MONGODB_URI, {
-      serverSelectionTimeoutMS: 2000,
-    });
-    isConnected = true;
-    console.log("MongoDB connected successfully via Mongoose.");
-
-    // Migration step: ensure all existing user records in the DB have at least PRO_PLAN_AI_CREDITS_LIMIT if they were on the old limit or depleted during prior testing
+  connectionPromise = (async () => {
     try {
-      const { User } = await import("../models/User.js");
-      await User.updateMany(
-        {
-          $or: [
-            { aiCreditsRemaining: { $exists: false } },
-            { aiCreditsRemaining: { $lt: PRO_PLAN_AI_CREDITS_LIMIT } },
-          ],
-        },
-        { $set: { aiCreditsRemaining: PRO_PLAN_AI_CREDITS_LIMIT } },
-      );
-    } catch (migErr) {
-      console.warn("User credits migration notice:", migErr);
+      mongoose.set("strictQuery", true);
+      mongoose.set("bufferCommands", false);
+      await mongoose.connect(ENV.MONGODB_URI, {
+        serverSelectionTimeoutMS: 5000,
+      });
+      isConnected = true;
+      isInMemoryMode = false;
+      console.log("MongoDB connected successfully via Mongoose.");
+
+      try {
+        const { User } = await import("../models/User.js");
+        await User.updateMany(
+          {
+            $or: [
+              { aiCreditsRemaining: { $exists: false } },
+              { aiCreditsRemaining: { $lt: PRO_PLAN_AI_CREDITS_LIMIT } },
+            ],
+          },
+          { $set: { aiCreditsRemaining: PRO_PLAN_AI_CREDITS_LIMIT } },
+        );
+      } catch (migErr) {
+        console.warn("User credits migration notice:", migErr);
+      }
+    } catch (error) {
+      isConnected = false;
+      isInMemoryMode = false;
+      console.error("MongoDB connection failed:", error);
+      throw error;
+    } finally {
+      connectionPromise = null;
     }
-  } catch (error) {
-    isConnected = false;
-    isInMemoryMode = false;
+  })();
 
-    console.error("MongoDB connection failed:", error);
-
-    throw error;
-  }
+  return connectionPromise;
 }
 
 export function isUsingMemoryDB(): boolean {

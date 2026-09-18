@@ -125,6 +125,12 @@ var isDeprecatedFallback = !rawFallback || DEPRECATED_OR_UNAVAILABLE_MODELS.incl
 var resolvedFallback = isDeprecatedFallback ? "gemini-3.7-flash" : rawFallback;
 var nodeEnv = process.env.NODE_ENV || "development";
 var DEV_INSECURE_JWT_SECRET = "super-secret-jwt-key-change-in-production-12345";
+var mongodbUri = (process.env.MONGODB_URI || "").trim();
+if (nodeEnv === "production" && (!mongodbUri || /mongodb(?:\+srv)?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\b/i.test(mongodbUri))) {
+  throw new Error(
+    "FATAL CONFIGURATION ERROR: MONGODB_URI must be set to a reachable MongoDB Atlas URI in production."
+  );
+}
 var jwtSecret = process.env.JWT_SECRET;
 if (nodeEnv === "production") {
   if (!jwtSecret || jwtSecret.trim() === "" || jwtSecret === DEV_INSECURE_JWT_SECRET) {
@@ -138,7 +144,7 @@ if (nodeEnv === "production") {
 var ENV = {
   PORT: parseInt(process.env.PORT || "3000", 10),
   NODE_ENV: nodeEnv,
-  MONGODB_URI: process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/freelancer_copilot",
+  MONGODB_URI: mongodbUri || "mongodb://127.0.0.1:27017/freelancer_copilot",
   JWT_SECRET: jwtSecret,
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || "7d",
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
@@ -358,6 +364,7 @@ var import_mongoose2 = __toESM(require("mongoose"), 1);
 init_planConfig();
 var isConnected = false;
 var isInMemoryMode = false;
+var connectionPromise = null;
 var memoryStore = {
   users: [],
   profiles: [],
@@ -368,33 +375,42 @@ var memoryStore = {
   followUps: []
 };
 async function connectDB() {
-  if (isConnected) return;
-  try {
-    import_mongoose2.default.set("strictQuery", true);
-    await import_mongoose2.default.connect(ENV.MONGODB_URI, {
-      serverSelectionTimeoutMS: 2e3
-    });
-    isConnected = true;
-    console.log("MongoDB connected successfully via Mongoose.");
+  if (import_mongoose2.default.connection.readyState === 1 && isConnected) return;
+  if (connectionPromise) return connectionPromise;
+  connectionPromise = (async () => {
     try {
-      const { User: User2 } = await Promise.resolve().then(() => (init_User(), User_exports));
-      await User2.updateMany(
-        {
-          $or: [
-            { aiCreditsRemaining: { $exists: false } },
-            { aiCreditsRemaining: { $lt: PRO_PLAN_AI_CREDITS_LIMIT } }
-          ]
-        },
-        { $set: { aiCreditsRemaining: PRO_PLAN_AI_CREDITS_LIMIT } }
-      );
-    } catch (migErr) {
-      console.warn("User credits migration notice:", migErr);
+      import_mongoose2.default.set("strictQuery", true);
+      import_mongoose2.default.set("bufferCommands", false);
+      await import_mongoose2.default.connect(ENV.MONGODB_URI, {
+        serverSelectionTimeoutMS: 5e3
+      });
+      isConnected = true;
+      isInMemoryMode = false;
+      console.log("MongoDB connected successfully via Mongoose.");
+      try {
+        const { User: User2 } = await Promise.resolve().then(() => (init_User(), User_exports));
+        await User2.updateMany(
+          {
+            $or: [
+              { aiCreditsRemaining: { $exists: false } },
+              { aiCreditsRemaining: { $lt: PRO_PLAN_AI_CREDITS_LIMIT } }
+            ]
+          },
+          { $set: { aiCreditsRemaining: PRO_PLAN_AI_CREDITS_LIMIT } }
+        );
+      } catch (migErr) {
+        console.warn("User credits migration notice:", migErr);
+      }
+    } catch (error) {
+      isConnected = false;
+      isInMemoryMode = false;
+      console.error("MongoDB connection failed:", error);
+      throw error;
+    } finally {
+      connectionPromise = null;
     }
-  } catch (error) {
-    console.warn("MongoDB connection unavailable. Operating in fallback in-memory database mode.");
-    isInMemoryMode = true;
-    isConnected = true;
-  }
+  })();
+  return connectionPromise;
 }
 function isUsingMemoryDB() {
   return isInMemoryMode;
