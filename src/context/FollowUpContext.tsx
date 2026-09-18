@@ -191,9 +191,10 @@ export const FollowUpProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  return (
-    <FollowUpContext.Provider
-      value={{
+  return React.createElement(
+    FollowUpContext.Provider,
+    {
+      value: {
         followUps,
         summary,
         thresholdDays,
@@ -210,10 +211,9 @@ export const FollowUpProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         sendFollowUpAction,
         setActiveFilter,
         setSearchQuery,
-      }}
-    >
-      {children}
-    </FollowUpContext.Provider>
+      },
+    },
+    children
   );
 };
 
