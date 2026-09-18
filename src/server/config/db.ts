@@ -1,6 +1,6 @@
-import mongoose from 'mongoose';
-import { ENV } from './env.js';
-import { PRO_PLAN_AI_CREDITS_LIMIT } from '../../shared/planConfig.js';
+import mongoose from "mongoose";
+import { ENV } from "./env.js";
+import { PRO_PLAN_AI_CREDITS_LIMIT } from "../../shared/planConfig.js";
 
 let isConnected = false;
 let isInMemoryMode = false;
@@ -20,16 +20,16 @@ export async function connectDB(): Promise<void> {
   if (isConnected) return;
 
   try {
-    mongoose.set('strictQuery', true);
+    mongoose.set("strictQuery", true);
     await mongoose.connect(ENV.MONGODB_URI, {
       serverSelectionTimeoutMS: 2000,
     });
     isConnected = true;
-    console.log('MongoDB connected successfully via Mongoose.');
+    console.log("MongoDB connected successfully via Mongoose.");
 
     // Migration step: ensure all existing user records in the DB have at least PRO_PLAN_AI_CREDITS_LIMIT if they were on the old limit or depleted during prior testing
     try {
-      const { User } = await import('../models/User.js');
+      const { User } = await import("../models/User.js");
       await User.updateMany(
         {
           $or: [
@@ -37,15 +37,18 @@ export async function connectDB(): Promise<void> {
             { aiCreditsRemaining: { $lt: PRO_PLAN_AI_CREDITS_LIMIT } },
           ],
         },
-        { $set: { aiCreditsRemaining: PRO_PLAN_AI_CREDITS_LIMIT } }
+        { $set: { aiCreditsRemaining: PRO_PLAN_AI_CREDITS_LIMIT } },
       );
     } catch (migErr) {
-      console.warn('User credits migration notice:', migErr);
+      console.warn("User credits migration notice:", migErr);
     }
   } catch (error) {
-    console.warn('MongoDB connection unavailable. Operating in fallback in-memory database mode.');
-    isInMemoryMode = true;
-    isConnected = true;
+    isConnected = false;
+    isInMemoryMode = false;
+
+    console.error("MongoDB connection failed:", error);
+
+    throw error;
   }
 }
 
@@ -53,10 +56,13 @@ export function isUsingMemoryDB(): boolean {
   return isInMemoryMode;
 }
 
-export function getDbStatus(): { connected: boolean; mode: 'mongodb' | 'memory' } {
+export function getDbStatus(): {
+  connected: boolean;
+  mode: "mongodb" | "memory";
+} {
   return {
     connected: isConnected,
-    mode: isInMemoryMode ? 'memory' : 'mongodb',
+    mode: isInMemoryMode ? "memory" : "mongodb",
   };
 }
 
@@ -70,5 +76,3 @@ export async function disconnectDB(): Promise<void> {
   }
   isConnected = false;
 }
-
-
