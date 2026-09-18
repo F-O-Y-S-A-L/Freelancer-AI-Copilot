@@ -110,24 +110,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       }
     }
 
-    let data: any;
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      try {
-        data = await response.json();
-      } catch {
-        const text = await response.text();
-        data = { success: false, error: text || `HTTP ${response.status}` };
-      }
-    } else {
-      const text = await response.text();
-      data = {
-        success: false,
-        error: !response.ok
-          ? `Server error (${response.status}): ${text.slice(0, 150).trim() || response.statusText}`
-          : text,
-      };
-    }
+    const data = await response.json();
 
     if (!response.ok) {
       return {

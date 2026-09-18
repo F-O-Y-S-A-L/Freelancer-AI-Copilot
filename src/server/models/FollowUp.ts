@@ -124,6 +124,4 @@ FollowUpSchema.index({ userId: 1, status: 1 });
 FollowUpSchema.index({ userId: 1, inquiryId: 1, lastUserReplyAt: 1 });
 FollowUpSchema.index({ userId: 1, dueAt: 1 });
 
-export const FollowUp =
-  (mongoose.models.FollowUp as mongoose.Model<IFollowUpDocument>) ||
-  mongoose.model<IFollowUpDocument>('FollowUp', FollowUpSchema);
+export const FollowUp = mongoose.model<IFollowUpDocument>('FollowUp', FollowUpSchema);

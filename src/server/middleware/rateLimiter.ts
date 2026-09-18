@@ -61,24 +61,9 @@ function getClientIdentifier(req: Request): string {
   // Support forwarded IP
   const forwarded = req.headers['x-forwarded-for'];
   if (typeof forwarded === 'string') {
-    const ip = forwarded.split(',')[0].trim();
-    if (ip) return ip;
+    return forwarded.split(',')[0].trim();
   }
-  const realIp = req.headers['x-real-ip'];
-  if (typeof realIp === 'string' && realIp.trim()) {
-    return realIp.trim();
-  }
-  try {
-    if (req.ip) return req.ip;
-  } catch {
-    // req.ip can throw if req.socket is undefined in serverless
-  }
-  try {
-    if (req.socket?.remoteAddress) return req.socket.remoteAddress;
-  } catch {
-    // req.socket can be undefined in serverless
-  }
-  return 'unknown';
+  return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
 export function createRateLimiter(options: RateLimitOptions) {
