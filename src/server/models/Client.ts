@@ -45,4 +45,6 @@ const ClientSchema = new Schema<IClientDocument>(
 ClientSchema.index({ userId: 1, email: 1 });
 ClientSchema.index({ userId: 1, name: 1 });
 
-export const Client = mongoose.model<IClientDocument>('Client', ClientSchema);
+export const Client =
+  (mongoose.models.Client as mongoose.Model<IClientDocument>) ||
+  mongoose.model<IClientDocument>('Client', ClientSchema);

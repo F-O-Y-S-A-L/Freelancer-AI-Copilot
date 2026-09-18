@@ -151,4 +151,6 @@ InquirySchema.index({ userId: 1, createdAt: -1 });
 InquirySchema.index({ userId: 1, clientId: 1, subject: 1 });
 InquirySchema.index({ userId: 1, clientEmail: 1, subject: 1 });
 
-export const Inquiry = mongoose.model<IInquiryDocument>('Inquiry', InquirySchema);
+export const Inquiry =
+  (mongoose.models.Inquiry as mongoose.Model<IInquiryDocument>) ||
+  mongoose.model<IInquiryDocument>('Inquiry', InquirySchema);

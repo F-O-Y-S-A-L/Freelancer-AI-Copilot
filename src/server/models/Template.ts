@@ -48,4 +48,6 @@ const TemplateSchema = new Schema<ITemplateDocument>(
 TemplateSchema.index({ userId: 1, category: 1 });
 TemplateSchema.index({ userId: 1, updatedAt: -1 });
 
-export const Template = mongoose.model<ITemplateDocument>('Template', TemplateSchema);
+export const Template =
+  (mongoose.models.Template as mongoose.Model<ITemplateDocument>) ||
+  mongoose.model<ITemplateDocument>('Template', TemplateSchema);
