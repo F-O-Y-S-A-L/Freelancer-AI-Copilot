@@ -1,7 +1,20 @@
-import { IAuthResponse, IUser, IUserProfile, ITemplate, IInquiry, IInquiryAnalysis, INotification, IApiResponse, IAnalyticsData, IUsageData, IFollowUp, IFollowUpSummary } from '../shared/types';
+import {
+  IAuthResponse,
+  IUser,
+  IUserProfile,
+  ITemplate,
+  IInquiry,
+  IInquiryAnalysis,
+  INotification,
+  IApiResponse,
+  IAnalyticsData,
+  IUsageData,
+  IFollowUp,
+  IFollowUpSummary,
+} from "../shared/types";
 
-const TOKEN_KEY = 'freelancer_copilot_token';
-const REFRESH_TOKEN_KEY = 'freelancer_copilot_refresh_token';
+const TOKEN_KEY = "freelancer_copilot_token";
+const REFRESH_TOKEN_KEY = "freelancer_copilot_refresh_token";
 
 export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -38,9 +51,9 @@ function onRefreshed(newToken: string | null) {
 async function trySilentRefresh(): Promise<string | null> {
   const currentRefreshToken = getStoredRefreshToken();
   try {
-    const res = await fetch('/api/auth/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch("/api/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken: currentRefreshToken || undefined }),
     });
     const data = await res.json();
@@ -58,15 +71,18 @@ async function trySilentRefresh(): Promise<string | null> {
   return null;
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<IApiResponse<T>> {
+async function request<T>(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<IApiResponse<T>> {
   let token = getStoredToken();
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
 
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
   try {
@@ -78,9 +94,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     // Handle expired token with silent refresh (except for auth routes)
     if (
       response.status === 401 &&
-      !endpoint.includes('/api/auth/login') &&
-      !endpoint.includes('/api/auth/register') &&
-      !endpoint.includes('/api/auth/refresh')
+      !endpoint.includes("/api/auth/login") &&
+      !endpoint.includes("/api/auth/register") &&
+      !endpoint.includes("/api/auth/refresh")
     ) {
       if (!isRefreshing) {
         isRefreshing = true;
@@ -89,7 +105,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         onRefreshed(newToken);
 
         if (newToken) {
-          headers['Authorization'] = `Bearer ${newToken}`;
+          headers["Authorization"] = `Bearer ${newToken}`;
           response = await fetch(endpoint, {
             ...options,
             headers,
@@ -100,8 +116,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         const refreshedToken = await new Promise<string | null>((resolve) => {
           refreshSubscribers.push(resolve);
         });
+
         if (refreshedToken) {
-          headers['Authorization'] = `Bearer ${refreshedToken}`;
+          headers["Authorization"] = `Bearer ${refreshedToken}`;
           response = await fetch(endpoint, {
             ...options,
             headers,
@@ -115,7 +132,10 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     if (!response.ok) {
       return {
         success: false,
-        error: data.message || data.error || 'Request failed with status ' + response.status,
+        error:
+          data.message ||
+          data.error ||
+          "Request failed with status " + response.status,
         details: data.details,
       };
     }
@@ -124,7 +144,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   } catch (error: any) {
     return {
       success: false,
-      error: error.message || 'Network communication error',
+      error: error.message || "Network communication error",
     };
   }
 }
@@ -132,44 +152,100 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 export const api = {
   // Auth
   register: (payload: { name: string; email: string; password: string }) =>
-    request<IAuthResponse>('/api/auth/register', {
-      method: 'POST',
+    request<IAuthResponse>("/api/auth/register", {
+      method: "POST",
       body: JSON.stringify(payload),
     }),
 
   login: (payload: { email: string; password: string }) =>
-    request<IAuthResponse>('/api/auth/login', {
-      method: 'POST',
+    request<IAuthResponse>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  verifyEmail: (payload: { email: string; code: string }) =>
+    request<IAuthResponse>("/api/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  resendVerification: (payload: { email: string }) =>
+    request<{ success: boolean; message: string }>(
+      "/api/auth/resend-verification",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ),
+
+  forgotPassword: (payload: { email: string }) =>
+    request<{ success: boolean; message: string }>(
+      "/api/auth/forgot-password",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ),
+
+  verifyResetToken: async (token: string, email: string) => {
+    const response = await request<{
+      valid: boolean;
+      message?: string;
+    }>(
+      `/api/auth/verify-reset-token?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`,
+    );
+
+    return {
+      success: response.success,
+      data: response.success ? { valid: (response as any).valid } : undefined,
+      message: (response as any).message,
+      error: response.error,
+    };
+  },
+  resetPassword: (payload: {
+    email: string;
+    token: string;
+    password: string;
+  }) =>
+    request<{ success: boolean; message: string }>("/api/auth/reset-password", {
+      method: "POST",
       body: JSON.stringify(payload),
     }),
 
   refreshToken: (payload?: { refreshToken?: string }) =>
-    request<{ token: string; accessToken: string; refreshToken: string }>('/api/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify(payload || { refreshToken: getStoredRefreshToken() || undefined }),
-    }),
+    request<{ token: string; accessToken: string; refreshToken: string }>(
+      "/api/auth/refresh",
+      {
+        method: "POST",
+        body: JSON.stringify(
+          payload || { refreshToken: getStoredRefreshToken() || undefined },
+        ),
+      },
+    ),
 
   logout: () =>
-    request<{ success: boolean; message: string }>('/api/auth/logout', {
-      method: 'POST',
-      body: JSON.stringify({ refreshToken: getStoredRefreshToken() || undefined }),
+    request<{ success: boolean; message: string }>("/api/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({
+        refreshToken: getStoredRefreshToken() || undefined,
+      }),
     }),
 
-  getMe: () => request<IUser>('/api/auth/me'),
+  getMe: () => request<IUser>("/api/auth/me"),
 
   // Profile
-  getProfile: () => request<IUserProfile & { name?: string }>('/api/profile'),
+  getProfile: () => request<IUserProfile & { name?: string }>("/api/profile"),
 
   updateProfile: (updates: Partial<IUserProfile> & { name?: string }) =>
-    request<IUserProfile & { name?: string }>('/api/profile', {
-      method: 'PUT',
+    request<IUserProfile & { name?: string }>("/api/profile", {
+      method: "PUT",
       body: JSON.stringify(updates),
     }),
 
   // Templates
-  getTemplates: () => request<ITemplate[]>('/api/templates'),
+  getTemplates: () => request<ITemplate[]>("/api/templates"),
 
-  getTemplate: (id: string) => request<ITemplate>('/api/templates/' + id),
+  getTemplate: (id: string) => request<ITemplate>("/api/templates/" + id),
 
   createTemplate: (payload: {
     title: string;
@@ -177,26 +253,26 @@ export const api = {
     content: string;
     description?: string;
   }) =>
-    request<ITemplate>('/api/templates', {
-      method: 'POST',
+    request<ITemplate>("/api/templates", {
+      method: "POST",
       body: JSON.stringify(payload),
     }),
 
   updateTemplate: (id: string, updates: Partial<ITemplate>) =>
-    request<ITemplate>('/api/templates/' + id, {
-      method: 'PUT',
+    request<ITemplate>("/api/templates/" + id, {
+      method: "PUT",
       body: JSON.stringify(updates),
     }),
 
   deleteTemplate: (id: string) =>
-    request<{ success: boolean }>('/api/templates/' + id, {
-      method: 'DELETE',
+    request<{ success: boolean }>("/api/templates/" + id, {
+      method: "DELETE",
     }),
 
   // Inquiries
-  getInquiries: () => request<IInquiry[]>('/api/inquiries'),
+  getInquiries: () => request<IInquiry[]>("/api/inquiries"),
 
-  getInquiry: (id: string) => request<IInquiry>('/api/inquiries/' + id),
+  getInquiry: (id: string) => request<IInquiry>("/api/inquiries/" + id),
 
   createInquiry: (payload: {
     clientId?: string;
@@ -205,109 +281,129 @@ export const api = {
     subject?: string;
     rawMessage?: string;
     sourceChannel?: string;
-    sourceType?: 'screenshot' | 'text';
+    sourceType?: "screenshot" | "text";
     screenshotData?: string;
     screenshotMimeType?: string;
     extractedMessageText?: string;
   }) =>
-    request<IInquiry>('/api/inquiries', {
-      method: 'POST',
+    request<IInquiry>("/api/inquiries", {
+      method: "POST",
       body: JSON.stringify(payload),
     }),
 
   updateInquiry: (id: string, updates: Partial<IInquiry>) =>
-    request<IInquiry>('/api/inquiries/' + id, {
-      method: 'PUT',
+    request<IInquiry>("/api/inquiries/" + id, {
+      method: "PUT",
       body: JSON.stringify(updates),
     }),
 
   markInquiryAsRead: (id: string) =>
-    request<IInquiry>('/api/inquiries/' + id + '/read', {
-      method: 'PATCH',
+    request<IInquiry>("/api/inquiries/" + id + "/read", {
+      method: "PATCH",
     }),
 
   toggleStarInquiry: (id: string, starred?: boolean) =>
-    request<IInquiry>('/api/inquiries/' + id + '/star', {
-      method: 'PATCH',
-      body: JSON.stringify(typeof starred === 'boolean' ? { starred } : {}),
+    request<IInquiry>("/api/inquiries/" + id + "/star", {
+      method: "PATCH",
+      body: JSON.stringify(typeof starred === "boolean" ? { starred } : {}),
     }),
 
   deleteInquiry: (id: string) =>
-    request<{ success: boolean }>('/api/inquiries/' + id, {
-      method: 'DELETE',
+    request<{ success: boolean }>("/api/inquiries/" + id, {
+      method: "DELETE",
     }),
 
   analyzeInquiry: (
     id: string,
-    payload?: { screenshotData?: string; screenshotMimeType?: string; fileName?: string }
+    payload?: {
+      screenshotData?: string;
+      screenshotMimeType?: string;
+      fileName?: string;
+    },
   ) =>
-    request<IInquiry & { aiCreditsRemaining?: number }>('/api/inquiries/' + id + '/analyze', {
-      method: 'POST',
-      body: payload ? JSON.stringify(payload) : undefined,
-    }),
+    request<IInquiry & { aiCreditsRemaining?: number }>(
+      "/api/inquiries/" + id + "/analyze",
+      {
+        method: "POST",
+        body: payload ? JSON.stringify(payload) : undefined,
+      },
+    ),
 
-  generateInquiryReply: (id: string, tone: 'friendly' | 'formal' | 'concise' | 'detailed') =>
-    request<IInquiry & { aiCreditsRemaining?: number }>('/api/inquiries/' + id + '/reply', {
-      method: 'POST',
-      body: JSON.stringify({ tone }),
-    }),
+  generateInquiryReply: (
+    id: string,
+    tone: "friendly" | "formal" | "concise" | "detailed",
+  ) =>
+    request<IInquiry & { aiCreditsRemaining?: number }>(
+      "/api/inquiries/" + id + "/reply",
+      {
+        method: "POST",
+        body: JSON.stringify({ tone }),
+      },
+    ),
 
-  translateInquiryAnalysis: (id: string, targetLanguage: 'bn' = 'bn') =>
-    request<IInquiry & { translatedAnalysis?: IInquiryAnalysis }>('/api/inquiries/' + id + '/translate-analysis', {
-      method: 'POST',
-      body: JSON.stringify({ targetLanguage }),
-    }),
+  translateInquiryAnalysis: (id: string, targetLanguage: "bn" = "bn") =>
+    request<IInquiry & { translatedAnalysis?: IInquiryAnalysis }>(
+      "/api/inquiries/" + id + "/translate-analysis",
+      {
+        method: "POST",
+        body: JSON.stringify({ targetLanguage }),
+      },
+    ),
 
   // Analytics & Usage
   getAnalytics: (
-    period: '7d' | '30d' | '90d' | 'year' | 'all' | 'custom' = '30d',
-    customRange?: { startDate?: string; endDate?: string }
+    period: "7d" | "30d" | "90d" | "year" | "all" | "custom" = "30d",
+    customRange?: { startDate?: string; endDate?: string },
   ) => {
     const params = new URLSearchParams();
-    params.set('period', period);
-    if (customRange?.startDate) params.set('startDate', customRange.startDate);
-    if (customRange?.endDate) params.set('endDate', customRange.endDate);
-    return request<IAnalyticsData>('/api/analytics?' + params.toString());
+    params.set("period", period);
+    if (customRange?.startDate) params.set("startDate", customRange.startDate);
+    if (customRange?.endDate) params.set("endDate", customRange.endDate);
+    return request<IAnalyticsData>("/api/analytics?" + params.toString());
   },
 
-  getUsage: () => request<IUsageData>('/api/usage'),
+  getUsage: () => request<IUsageData>("/api/usage"),
 
   // Notifications
-  getNotifications: () => request<INotification[]>('/api/notifications'),
+  getNotifications: () => request<INotification[]>("/api/notifications"),
 
   getUnreadNotificationCount: () =>
-    request<{ count: number }>('/api/notifications/unread-count'),
+    request<{ count: number }>("/api/notifications/unread-count"),
 
   markNotificationAsRead: (id: string) =>
-    request<INotification>('/api/notifications/' + id + '/read', {
-      method: 'PATCH',
+    request<INotification>("/api/notifications/" + id + "/read", {
+      method: "PATCH",
     }),
 
   markAllNotificationsAsRead: () =>
-    request<{ count: number }>('/api/notifications/mark-all-read', {
-      method: 'POST',
+    request<{ count: number }>("/api/notifications/mark-all-read", {
+      method: "POST",
     }),
 
   deleteNotification: (id: string) =>
-    request<{ success: boolean }>('/api/notifications/' + id, {
-      method: 'DELETE',
+    request<{ success: boolean }>("/api/notifications/" + id, {
+      method: "DELETE",
     }),
 
   // Follow-ups
   getFollowUps: (params?: { status?: string; search?: string }) => {
     const searchParams = new URLSearchParams();
-    if (params?.status && params.status !== 'all') searchParams.set('status', params.status);
-    if (params?.search) searchParams.set('search', params.search);
+    if (params?.status && params.status !== "all")
+      searchParams.set("status", params.status);
+    if (params?.search) searchParams.set("search", params.search);
     const qs = searchParams.toString();
-    return request<{ followUps: IFollowUp[]; summary: IFollowUpSummary; thresholdDays: number }>(
-      '/api/followups' + (qs ? '?' + qs : '')
-    );
+
+    return request<{
+      followUps: IFollowUp[];
+      summary: IFollowUpSummary;
+      thresholdDays: number;
+    }>("/api/followups" + (qs ? "?" + qs : ""));
   },
 
   generateFollowUp: (payload: {
     followUpId?: string;
     inquiryId?: string;
-    tone?: 'friendly' | 'formal' | 'concise' | 'detailed';
+    tone?: "friendly" | "formal" | "concise" | "detailed";
     templateId?: string;
     notes?: string;
   }) =>
@@ -316,34 +412,44 @@ export const api = {
       tone: string;
       aiCreditsRemaining?: number;
       followUp?: IFollowUp;
-    }>('/api/followups/generate', {
-      method: 'POST',
+    }>("/api/followups/generate", {
+      method: "POST",
       body: JSON.stringify(payload),
     }),
 
-  scheduleFollowUp: (id: string, payload: { scheduledFor: string; notes?: string }) =>
-    request<IFollowUp>('/api/followups/' + id + '/schedule', {
-      method: 'POST',
+  scheduleFollowUp: (
+    id: string,
+    payload: { scheduledFor: string; notes?: string },
+  ) =>
+    request<IFollowUp>("/api/followups/" + id + "/schedule", {
+      method: "POST",
       body: JSON.stringify(payload),
     }),
 
-  snoozeFollowUp: (id: string, payload: { snoozedUntil: string; notes?: string }) =>
-    request<IFollowUp>('/api/followups/' + id + '/snooze', {
-      method: 'POST',
+  snoozeFollowUp: (
+    id: string,
+    payload: { snoozedUntil: string; notes?: string },
+  ) =>
+    request<IFollowUp>("/api/followups/" + id + "/snooze", {
+      method: "POST",
       body: JSON.stringify(payload),
     }),
 
   dismissFollowUp: (id: string) =>
-    request<IFollowUp>('/api/followups/' + id + '/dismiss', {
-      method: 'POST',
+    request<IFollowUp>("/api/followups/" + id + "/dismiss", {
+      method: "POST",
     }),
 
   sendFollowUp: (id: string, payload: { message: string }) =>
-    request<{ followUp: IFollowUp; inquiry: IInquiry }>('/api/followups/' + id + '/send', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+    request<{ followUp: IFollowUp; inquiry: IInquiry }>(
+      "/api/followups/" + id + "/send",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ),
 
   // Health
-  checkHealth: () => request<{ status: string; service: string }>('/api/health'),
+  checkHealth: () =>
+    request<{ status: string; service: string }>("/api/health"),
 };

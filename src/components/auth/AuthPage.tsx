@@ -1,27 +1,71 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../context/AuthContext';
-import { LoginPage } from './LoginPage';
-import { SignupPage } from './SignupPage';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../../context/AuthContext";
+import { LoginPage } from "./LoginPage";
+import { SignupPage } from "./SignupPage";
+import { VerifyEmailPage } from "./VerifyEmailPage";
+import { ForgotPasswordPage } from "./ForgotPasswordPage";
+import { ResetPasswordPage } from "./ResetPasswordPage";
+import { ArrowLeft, Sparkles } from "lucide-react";
+
+export type AuthMode =
+  | "login"
+  | "signup"
+  | "verify-email"
+  | "forgot-password"
+  | "reset-password";
 
 interface AuthPageProps {
-  initialMode?: 'login' | 'signup';
+  initialMode?: AuthMode;
+  initialEmail?: string;
+  initialToken?: string;
   onNavigate?: (path: string) => void;
 }
 
-export const AuthPage: React.FC<AuthPageProps> = ({ initialMode, onNavigate }) => {
-  const { login, register, isLoading } = useAuth();
-  
-  // Detect initial mode from prop or window pathname
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>(() => {
-    if (initialMode) return initialMode;
-    if (typeof window !== 'undefined') {
-      const path = window.location.pathname.toLowerCase();
-      if (path.includes('signup') || path.includes('register')) {
-        return 'signup';
-      }
+export const AuthPage: React.FC<AuthPageProps> = ({
+  initialMode,
+  initialEmail = "",
+  initialToken = "",
+  onNavigate,
+}) => {
+  const {
+    login,
+    register,
+    verifyEmail,
+    resendVerification,
+    forgotPassword,
+    resetPassword,
+    isLoading,
+  } = useAuth();
+
+  const [verifyEmailAddress, setVerifyEmailAddress] = useState<string>(() => {
+    if (initialEmail) return initialEmail;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("email") || "";
     }
-    return 'login';
+    return "";
+  });
+
+  const [resetToken, setResetToken] = useState<string>(() => {
+    if (initialToken) return initialToken;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("token") || "";
+    }
+    return "";
+  });
+
+  // Detect initial mode from prop or window pathname
+  const [authMode, setAuthMode] = useState<AuthMode>(() => {
+    if (initialMode) return initialMode;
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname.toLowerCase();
+      if (path.includes("reset-password")) return "reset-password";
+      if (path.includes("forgot-password")) return "forgot-password";
+      if (path.includes("verify-email")) return "verify-email";
+      if (path.includes("signup") || path.includes("register")) return "signup";
+    }
+    return "login";
   });
 
   useEffect(() => {
@@ -33,40 +77,64 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode, onNavigate }) =
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname.toLowerCase();
-      if (path.includes('signup') || path.includes('register')) {
-        setAuthMode('signup');
-      } else if (path.includes('login')) {
-        setAuthMode('login');
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("email")) {
+        setVerifyEmailAddress(params.get("email") || "");
+      }
+      if (params.get("token")) {
+        setResetToken(params.get("token") || "");
+      }
+
+      if (path.includes("reset-password")) {
+        setAuthMode("reset-password");
+      } else if (path.includes("forgot-password")) {
+        setAuthMode("forgot-password");
+      } else if (path.includes("verify-email")) {
+        setAuthMode("verify-email");
+
+        const email = new URLSearchParams(window.location.search).get("email");
+
+        if (email) {
+          setVerifyEmailAddress(email);
+        }
+      } else if (path.includes("signup") || path.includes("register")) {
+        setAuthMode("signup");
+      } else if (path.includes("login")) {
+        setAuthMode("login");
       }
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  const handleSwitchToSignup = () => {
-    setAuthMode('signup');
+  const navigateTo = (mode: AuthMode, path: string) => {
+    setAuthMode(mode);
     if (onNavigate) {
-      onNavigate('/signup');
+      onNavigate(path);
     } else {
-      window.history.pushState(null, '', '/signup');
+      window.history.pushState(null, "", path);
     }
   };
 
-  const handleSwitchToLogin = () => {
-    setAuthMode('login');
-    if (onNavigate) {
-      onNavigate('/login');
-    } else {
-      window.history.pushState(null, '', '/login');
-    }
+  const handleSwitchToSignup = () => navigateTo("signup", "/signup");
+  const handleSwitchToLogin = () => navigateTo("login", "/login");
+  const handleSwitchToForgotPassword = () =>
+    navigateTo("forgot-password", "/forgot-password");
+
+  const handleSwitchToVerifyEmail = (email: string) => {
+    setVerifyEmailAddress(email);
+    navigateTo(
+      "verify-email",
+      `/verify-email?email=${encodeURIComponent(email)}`,
+    );
   };
 
   const handleGoHome = () => {
     if (onNavigate) {
-      onNavigate('/');
+      onNavigate("/");
     } else {
-      window.history.pushState(null, '', '/');
-      window.dispatchEvent(new PopStateEvent('popstate'));
+      window.history.pushState(null, "", "/");
+      window.dispatchEvent(new PopStateEvent("popstate"));
     }
   };
 
@@ -92,21 +160,57 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode, onNavigate }) =
 
         <div className="flex items-center space-x-2 text-xs text-slate-500">
           <Sparkles className="w-3.5 h-3.5 text-violet-600 fill-violet-600" />
-          <span className="font-semibold hidden sm:inline">Freelancer AI Copilot</span>
+          <span className="font-semibold hidden sm:inline">
+            Freelancer AI Copilot
+          </span>
         </div>
       </div>
 
       <div className="w-full flex-1 flex items-center justify-center relative z-10 py-6 sm:py-10">
-        {authMode === 'login' ? (
+        {authMode === "login" && (
           <LoginPage
             onLogin={login}
             onSwitchToSignup={handleSwitchToSignup}
+            onSwitchToForgotPassword={handleSwitchToForgotPassword}
+            onSwitchToVerifyEmail={handleSwitchToVerifyEmail}
             isLoading={isLoading}
           />
-        ) : (
+        )}
+
+        {authMode === "signup" && (
           <SignupPage
             onRegister={register}
+            onRegistered={(email) => handleSwitchToVerifyEmail(email)}
             onSwitchToLogin={handleSwitchToLogin}
+            isLoading={isLoading}
+          />
+        )}
+
+        {authMode === "verify-email" && (
+          <VerifyEmailPage
+            email={verifyEmailAddress}
+            onVerify={verifyEmail}
+            onResend={resendVerification}
+            onSwitchToLogin={handleSwitchToLogin}
+            isLoading={isLoading}
+          />
+        )}
+
+        {authMode === "forgot-password" && (
+          <ForgotPasswordPage
+            onForgotPassword={forgotPassword}
+            onSwitchToLogin={handleSwitchToLogin}
+            isLoading={isLoading}
+          />
+        )}
+
+        {authMode === "reset-password" && (
+          <ResetPasswordPage
+            initialToken={resetToken}
+            initialEmail={verifyEmailAddress}
+            onResetPassword={resetPassword}
+            onSwitchToLogin={handleSwitchToLogin}
+            onSwitchToForgotPassword={handleSwitchToForgotPassword}
             isLoading={isLoading}
           />
         )}
@@ -115,7 +219,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode, onNavigate }) =
       {/* Clean Footer */}
       <footer className="relative z-10 text-center py-4 text-xs text-slate-500 border-t border-slate-200/60 mt-auto">
         <p>
-          Freelancer AI Business Copilot &bull; Deterministic proposal intelligence
+          Freelancer AI Business Copilot &bull; Deterministic proposal
+          intelligence
         </p>
       </footer>
     </div>

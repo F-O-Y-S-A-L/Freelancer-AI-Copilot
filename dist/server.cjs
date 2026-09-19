@@ -93,11 +93,46 @@ var init_User = __esm({
         aiCreditsRemaining: {
           type: Number,
           default: PRO_PLAN_AI_CREDITS_LIMIT
+        },
+        isEmailVerified: {
+          type: Boolean,
+          default: false
+        },
+        emailVerificationCodeHash: {
+          type: String,
+          required: false
+        },
+        emailVerificationExpiresAt: {
+          type: Date,
+          required: false
+        },
+        emailVerificationAttempts: {
+          type: Number,
+          default: 0
+        },
+        emailVerificationLastSentAt: {
+          type: Date,
+          required: false
+        },
+        passwordResetTokenHash: {
+          type: String,
+          required: false
+        },
+        passwordResetExpiresAt: {
+          type: Date,
+          required: false
+        },
+        passwordResetUsed: {
+          type: Boolean,
+          default: false
+        },
+        passwordResetLastRequestedAt: {
+          type: Date,
+          required: false
         }
       },
       {
-        timestamps: true,
-        bufferCommands: false
+        timestamps: true
       }
     );
     User = import_mongoose.default.model("User", UserSchema);
@@ -341,6 +376,22 @@ var authRateLimiter = createRateLimiter({
   keyPrefix: "auth",
   message: "Too many authentication attempts. Please wait 15 minutes before trying again."
 });
+var verificationRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1e3,
+  // 15 minutes
+  max: 15,
+  // 15 attempts
+  keyPrefix: "verify",
+  message: "Too many verification attempts. Please wait 15 minutes before trying again."
+});
+var passwordResetRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1e3,
+  // 15 minutes
+  max: 10,
+  // 10 attempts
+  keyPrefix: "pwd-reset",
+  message: "Too many password reset requests. Please wait 15 minutes before trying again."
+});
 var analysisRateLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1e3,
   // 1 hour
@@ -408,10 +459,18 @@ async function connectDB() {
               { aiCreditsRemaining: { $lt: PRO_PLAN_AI_CREDITS_LIMIT } }
             ]
           },
-          { $set: { aiCreditsRemaining: PRO_PLAN_AI_CREDITS_LIMIT } }
+          {
+            $set: {
+              aiCreditsRemaining: PRO_PLAN_AI_CREDITS_LIMIT
+            }
+          }
+        );
+        await User2.updateMany(
+          { isEmailVerified: { $exists: false } },
+          { $set: { isEmailVerified: true } }
         );
       } catch (migErr) {
-        console.warn("User credits migration notice:", migErr);
+        console.warn("User migration notice:", migErr);
       }
     } catch (error) {
       isConnected = false;
@@ -441,12 +500,15 @@ async function disconnectDB() {
     }
   }
   isConnected = false;
+  isInMemoryMode = false;
+  connectionPromise = null;
 }
 
 // src/server/routes/authRoutes.ts
 var import_express = require("express");
 
 // src/server/controllers/authController.ts
+var import_crypto = __toESM(require("crypto"), 1);
 init_User();
 
 // src/server/models/UserProfile.ts
@@ -620,6 +682,245 @@ function verifyRefreshToken(token) {
 // src/server/controllers/authController.ts
 init_planConfig();
 init_types();
+
+// src/server/services/emailService.ts
+var import_nodemailer = __toESM(require("nodemailer"), 1);
+var sentEmailsLog = [];
+var smtpUser = process.env.SMTP_USER;
+var smtpPass = process.env.SMTP_PASS;
+var smtpFrom = process.env.SMTP_FROM || smtpUser;
+if (!smtpUser || !smtpPass) {
+  throw new Error("Missing SMTP_USER or SMTP_PASS environment variables");
+}
+var transporter = import_nodemailer.default.createTransport({
+  service: "gmail",
+  auth: {
+    user: smtpUser,
+    pass: smtpPass
+  }
+});
+var emailService = {
+  /**
+   * Send 6-digit verification code email for account activation
+   */
+  async sendVerificationEmail(toEmail, code, recipientName) {
+    const greeting = recipientName ? `Hello ${recipientName},` : "Hello,";
+    const subject = "Your Verification Code - Freelancer AI Copilot";
+    const text = `${greeting}
+
+Thank you for signing up for Freelancer AI Copilot.
+
+Your 6-digit verification code is:
+
+${code}
+
+This code will expire in 15 minutes. For security reasons, please do not share this code with anyone.
+
+If you did not create an account, please disregard this email.
+
+Best regards,
+The Freelancer AI Copilot Team`;
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${subject}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F8FAFC; margin: 0; padding: 32px; color: #1E293B;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 540px; margin: 0 auto; background: #FFFFFF; border-radius: 16px; border: 1px solid #E2E8F0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <tr>
+      <td style="padding: 32px 32px 24px 32px; background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%); text-align: center;">
+        <h1 style="color: #FFFFFF; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.02em;">Freelancer AI Copilot</h1>
+        <p style="color: #E9D5FF; margin: 6px 0 0 0; font-size: 13px;">Account Email Verification</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 32px;">
+        <p style="font-size: 15px; line-height: 1.6; margin: 0 0 16px 0; color: #334155;">${greeting}</p>
+        <p style="font-size: 14px; line-height: 1.6; margin: 0 0 24px 0; color: #475569;">
+          Thank you for signing up! Enter the following 6-digit verification code on the activation screen to complete your registration:
+        </p>
+        <div style="background-color: #F1F5F9; border: 1px dashed #CBD5E1; border-radius: 12px; padding: 20px; text-align: center; margin: 0 0 24px 0;">
+          <span style="font-family: 'Courier New', Courier, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #6D28D9; display: inline-block;">${code}</span>
+        </div>
+        <p style="font-size: 12px; line-height: 1.5; color: #64748B; margin: 0 0 8px 0;">
+          &bull; This code will expire in <strong>15 minutes</strong>.<br>
+          &bull; For your protection, never share this code with anyone.
+        </p>
+        <div style="border-top: 1px solid #E2E8F0; margin-top: 24px; padding-top: 20px;">
+          <p style="font-size: 12px; color: #94A3B8; margin: 0; line-height: 1.5;">
+            If you did not request this verification, you can safely ignore this email.
+          </p>
+        </div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+    const record = {
+      to: toEmail.toLowerCase(),
+      subject,
+      text,
+      html,
+      code,
+      sentAt: /* @__PURE__ */ new Date()
+    };
+    sentEmailsLog.push(record);
+    try {
+      const info = await transporter.sendMail({
+        from: smtpFrom,
+        to: toEmail,
+        subject,
+        text,
+        html
+      });
+      logger.info(
+        `[EmailService] Verification email delivered to ${toEmail}, messageId=${info.messageId}`
+      );
+      return {
+        success: true,
+        messageId: info.messageId,
+        previewCode: process.env.NODE_ENV !== "production" ? code : void 0
+      };
+    } catch (error) {
+      logger.error(
+        `[EmailService] Failed to send verification email to ${toEmail}`,
+        error
+      );
+      return {
+        success: false
+      };
+    }
+  },
+  /**
+   * Send secure password reset link email
+   */
+  async sendPasswordResetEmail(toEmail, resetUrl, recipientName) {
+    const greeting = recipientName ? `Hello ${recipientName},` : "Hello,";
+    const subject = "Reset Your Password - Freelancer AI Copilot";
+    const text = `${greeting}
+
+We received a request to reset the password for your Freelancer AI Copilot account.
+
+Please visit the link below to set a new password:
+
+${resetUrl}
+
+This single-use link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email and your password will remain unchanged.
+
+Best regards,
+The Freelancer AI Copilot Team`;
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${subject}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F8FAFC; margin: 0; padding: 32px; color: #1E293B;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 540px; margin: 0 auto; background: #FFFFFF; border-radius: 16px; border: 1px solid #E2E8F0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <tr>
+      <td style="padding: 32px 32px 24px 32px; background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%); text-align: center;">
+        <h1 style="color: #FFFFFF; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.02em;">Freelancer AI Copilot</h1>
+        <p style="color: #E9D5FF; margin: 6px 0 0 0; font-size: 13px;">Secure Password Reset</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 32px;">
+        <p style="font-size: 15px; line-height: 1.6; margin: 0 0 16px 0; color: #334155;">${greeting}</p>
+        <p style="font-size: 14px; line-height: 1.6; margin: 0 0 24px 0; color: #475569;">
+          We received a request to reset your password. Click the button below to choose a new, secure password:
+        </p>
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${resetUrl}" style="background-color: #7C3AED; color: #FFFFFF; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-size: 14px; font-weight: 600; display: inline-block; box-shadow: 0 2px 4px rgba(124, 58, 237, 0.3);">Reset Password</a>
+        </div>
+        <p style="font-size: 12px; line-height: 1.5; color: #64748B; margin: 0 0 8px 0;">
+          &bull; This link is single-use and will expire in <strong>1 hour</strong>.<br>
+          &bull; If the button above doesn't work, copy and paste this URL into your browser:<br>
+          <span style="color: #6D28D9; word-break: break-all;">${resetUrl}</span>
+        </p>
+        <div style="border-top: 1px solid #E2E8F0; margin-top: 24px; padding-top: 20px;">
+          <p style="font-size: 12px; color: #94A3B8; margin: 0; line-height: 1.5;">
+            If you did not request a password reset, please ignore this email. Your current password remains secure.
+          </p>
+        </div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+    const record = {
+      to: toEmail.toLowerCase(),
+      subject,
+      text,
+      html,
+      resetUrl,
+      sentAt: /* @__PURE__ */ new Date()
+    };
+    sentEmailsLog.push(record);
+    try {
+      const info = await transporter.sendMail({
+        from: smtpFrom,
+        to: toEmail,
+        subject,
+        text,
+        html
+      });
+      logger.info(
+        `[EmailService] Password reset email delivered to ${toEmail}, messageId=${info.messageId}`
+      );
+      return {
+        success: true,
+        messageId: info.messageId,
+        resetUrl: process.env.NODE_ENV !== "production" ? resetUrl : void 0
+      };
+    } catch (error) {
+      logger.error(
+        `[EmailService] Failed to send password reset email to ${toEmail}`,
+        error
+      );
+      return {
+        success: false
+      };
+    }
+  },
+  /**
+   * Retrieves the latest sent email (optionally filtered by recipient email)
+   */
+  getLatestEmail(toEmail) {
+    if (!toEmail) {
+      return sentEmailsLog[sentEmailsLog.length - 1];
+    }
+    const lower = toEmail.toLowerCase();
+    for (let i = sentEmailsLog.length - 1; i >= 0; i--) {
+      if (sentEmailsLog[i].to === lower) {
+        return sentEmailsLog[i];
+      }
+    }
+    return void 0;
+  },
+  /**
+   * Get all sent emails (for testing / auditing)
+   */
+  getAllSentEmails() {
+    return [...sentEmailsLog];
+  },
+  /**
+   * Clear email logs (for test teardowns)
+   */
+  clearSentEmails() {
+    sentEmailsLog.length = 0;
+  }
+};
+
+// src/server/controllers/authController.ts
+function generate6DigitCode() {
+  return import_crypto.default.randomInt(1e5, 1e6).toString();
+}
+function hashCode(value) {
+  return import_crypto.default.createHash("sha256").update(value).digest("hex");
+}
 function setRefreshTokenCookie(res, refreshToken2) {
   const isProd = ENV.NODE_ENV === "production";
   const cookieParts = [
@@ -665,9 +966,11 @@ function extractRefreshToken(req) {
 async function register(req, res, next) {
   try {
     const { name, email, password } = req.body;
+    const cleanEmail = (email || "").toLowerCase().trim();
+    const cleanName = (name || "").trim();
     if (isUsingMemoryDB()) {
       const existingUser2 = memoryStore.users.find(
-        (u) => u.email === email.toLowerCase()
+        (u) => u.email === cleanEmail
       );
       if (existingUser2) {
         res.status(400).json({
@@ -678,15 +981,23 @@ async function register(req, res, next) {
       }
       const passwordHash2 = await hashPassword(password);
       const userId = "mem_" + Date.now() + Math.random().toString(36).substr(2, 4);
+      const verificationCode2 = generate6DigitCode();
+      const codeHash2 = hashCode(verificationCode2);
+      const expiresAt2 = new Date(Date.now() + 15 * 60 * 1e3);
       const newUser = {
         id: userId,
         _id: userId,
-        name,
-        email: email.toLowerCase(),
+        name: cleanName,
+        email: cleanEmail,
         passwordHash: passwordHash2,
         role: "freelancer",
         avatar: DEFAULT_AVATAR,
         aiCreditsRemaining: PRO_PLAN_AI_CREDITS_LIMIT,
+        isEmailVerified: false,
+        emailVerificationCodeHash: codeHash2,
+        emailVerificationExpiresAt: expiresAt2,
+        emailVerificationAttempts: 0,
+        emailVerificationLastSentAt: /* @__PURE__ */ new Date(),
         createdAt: /* @__PURE__ */ new Date(),
         updatedAt: /* @__PURE__ */ new Date()
       };
@@ -717,20 +1028,15 @@ async function register(req, res, next) {
         updatedAt: /* @__PURE__ */ new Date()
       };
       memoryStore.profiles.push(defaultProfile);
-      const accessToken2 = signAccessToken({
-        userId: newUser.id,
-        email: newUser.email,
-        role: newUser.role
-      });
-      const refreshTokenValue2 = signRefreshToken({
-        userId: newUser.id,
-        email: newUser.email,
-        role: newUser.role
-      });
-      setRefreshTokenCookie(res, refreshTokenValue2);
+      await emailService.sendVerificationEmail(
+        cleanEmail,
+        verificationCode2,
+        cleanName
+      );
       res.status(201).json({
         success: true,
-        message: "Account registered successfully",
+        requiresVerification: true,
+        message: "Account created successfully! Please enter the 6-digit verification code sent to your email to activate your account.",
         data: {
           user: {
             id: newUser.id,
@@ -739,28 +1045,36 @@ async function register(req, res, next) {
             role: newUser.role,
             avatar: newUser.avatar,
             aiCreditsRemaining: newUser.aiCreditsRemaining,
+            isEmailVerified: false,
             createdAt: newUser.createdAt.toISOString(),
             updatedAt: newUser.updatedAt.toISOString()
           },
-          token: accessToken2,
-          accessToken: accessToken2,
-          refreshToken: refreshTokenValue2
+          email: newUser.email,
+          requiresVerification: true
         }
       });
       return;
     }
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const existingUser = await User.findOne({ email: cleanEmail });
     if (existingUser) {
       res.status(400).json({ success: false, error: "User with this email already exists" });
       return;
     }
     const passwordHash = await hashPassword(password);
+    const verificationCode = generate6DigitCode();
+    const codeHash = hashCode(verificationCode);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1e3);
     const user = await User.create({
-      name,
-      email: email.toLowerCase(),
+      name: cleanName,
+      email: cleanEmail,
       passwordHash,
       role: "freelancer",
-      avatar: DEFAULT_AVATAR
+      avatar: DEFAULT_AVATAR,
+      isEmailVerified: false,
+      emailVerificationCodeHash: codeHash,
+      emailVerificationExpiresAt: expiresAt,
+      emailVerificationAttempts: 0,
+      emailVerificationLastSentAt: /* @__PURE__ */ new Date()
     });
     await UserProfile.create({
       userId: user._id,
@@ -784,20 +1098,15 @@ async function register(req, res, next) {
       depositPercentage: 0,
       communicationTone: "friendly"
     });
-    const accessToken = signAccessToken({
-      userId: user._id.toString(),
-      email: user.email,
-      role: user.role
-    });
-    const refreshTokenValue = signRefreshToken({
-      userId: user._id.toString(),
-      email: user.email,
-      role: user.role
-    });
-    setRefreshTokenCookie(res, refreshTokenValue);
+    await emailService.sendVerificationEmail(
+      cleanEmail,
+      verificationCode,
+      cleanName
+    );
     res.status(201).json({
       success: true,
-      message: "Account registered successfully",
+      requiresVerification: true,
+      message: "Account created successfully! Please enter the 6-digit verification code sent to your email to activate your account.",
       data: {
         user: {
           id: user._id.toString(),
@@ -806,12 +1115,12 @@ async function register(req, res, next) {
           role: user.role,
           avatar: user.avatar || DEFAULT_AVATAR,
           aiCreditsRemaining: user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
+          isEmailVerified: false,
           createdAt: user.createdAt.toISOString(),
           updatedAt: user.updatedAt.toISOString()
         },
-        token: accessToken,
-        accessToken,
-        refreshToken: refreshTokenValue
+        email: user.email,
+        requiresVerification: true
       }
     });
   } catch (error) {
@@ -821,9 +1130,9 @@ async function register(req, res, next) {
 async function login(req, res, next) {
   try {
     const { email, password } = req.body;
-    const normalizedEmail = email.trim().toLowerCase();
+    const cleanEmail = (email || "").toLowerCase().trim();
     if (isUsingMemoryDB()) {
-      const user2 = memoryStore.users.find((u) => u.email === normalizedEmail);
+      const user2 = memoryStore.users.find((u) => u.email === cleanEmail);
       if (!user2) {
         res.status(401).json({ success: false, error: "Invalid email or password" });
         return;
@@ -831,6 +1140,16 @@ async function login(req, res, next) {
       const isMatch2 = await comparePassword(password, user2.passwordHash);
       if (!isMatch2) {
         res.status(401).json({ success: false, error: "Invalid email or password" });
+        return;
+      }
+      if (user2.isEmailVerified === false) {
+        res.status(403).json({
+          success: false,
+          error: "EMAIL_NOT_VERIFIED",
+          requiresVerification: true,
+          email: user2.email,
+          message: "Your email address has not been verified yet. Please enter the 6-digit verification code sent to your email to activate your account."
+        });
         return;
       }
       const accessToken2 = signAccessToken({
@@ -855,6 +1174,7 @@ async function login(req, res, next) {
             role: user2.role,
             avatar: user2.avatar || DEFAULT_AVATAR,
             aiCreditsRemaining: user2.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
+            isEmailVerified: true,
             createdAt: user2.createdAt.toISOString(),
             updatedAt: user2.updatedAt.toISOString()
           },
@@ -865,7 +1185,7 @@ async function login(req, res, next) {
       });
       return;
     }
-    const user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({ email: cleanEmail });
     if (!user) {
       res.status(401).json({ success: false, error: "Invalid email or password" });
       return;
@@ -873,6 +1193,16 @@ async function login(req, res, next) {
     const isMatch = await comparePassword(password, user.passwordHash);
     if (!isMatch) {
       res.status(401).json({ success: false, error: "Invalid email or password" });
+      return;
+    }
+    if (user.isEmailVerified === false) {
+      res.status(403).json({
+        success: false,
+        error: "EMAIL_NOT_VERIFIED",
+        requiresVerification: true,
+        email: user.email,
+        message: "Your email address has not been verified yet. Please enter the 6-digit verification code sent to your email to activate your account."
+      });
       return;
     }
     const accessToken = signAccessToken({
@@ -897,6 +1227,7 @@ async function login(req, res, next) {
           role: user.role,
           avatar: user.avatar || DEFAULT_AVATAR,
           aiCreditsRemaining: user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
+          isEmailVerified: true,
           createdAt: user.createdAt.toISOString(),
           updatedAt: user.updatedAt.toISOString()
         },
@@ -927,6 +1258,7 @@ async function getMe(req, res, next) {
           role: user2.role,
           avatar: user2.avatar || DEFAULT_AVATAR,
           aiCreditsRemaining: user2.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
+          isEmailVerified: user2.isEmailVerified ?? true,
           createdAt: user2.createdAt.toISOString(),
           updatedAt: user2.updatedAt.toISOString()
         }
@@ -947,6 +1279,7 @@ async function getMe(req, res, next) {
         role: user.role,
         avatar: user.avatar || DEFAULT_AVATAR,
         aiCreditsRemaining: user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
+        isEmailVerified: user.isEmailVerified ?? true,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString()
       }
@@ -1038,6 +1371,401 @@ async function logout(req, res, next) {
     next(error);
   }
 }
+async function verifyEmail(req, res, next) {
+  try {
+    const { email, code } = req.body;
+    const cleanEmail = (email || "").toLowerCase().trim();
+    const cleanCode = (code || "").trim();
+    if (!cleanEmail || !cleanCode) {
+      res.status(400).json({
+        success: false,
+        error: "Email and 6-digit verification code are required."
+      });
+      return;
+    }
+    const codeHash = hashCode(cleanCode);
+    if (isUsingMemoryDB()) {
+      const user2 = memoryStore.users.find((u) => u.email === cleanEmail);
+      if (!user2) {
+        res.status(404).json({
+          success: false,
+          error: "No account found with this email address."
+        });
+        return;
+      }
+      if (user2.isEmailVerified === true) {
+        res.status(400).json({
+          success: false,
+          error: "Account is already verified. You can sign in."
+        });
+        return;
+      }
+      if ((user2.emailVerificationAttempts || 0) >= 5) {
+        res.status(429).json({
+          success: false,
+          error: "TOO_MANY_ATTEMPTS",
+          message: "Too many failed verification attempts. Please request a new verification code."
+        });
+        return;
+      }
+      if (!user2.emailVerificationExpiresAt || new Date(user2.emailVerificationExpiresAt).getTime() < Date.now()) {
+        res.status(400).json({
+          success: false,
+          error: "CODE_EXPIRED",
+          message: "Verification code has expired. Please request a new code."
+        });
+        return;
+      }
+      if (user2.emailVerificationCodeHash !== codeHash) {
+        user2.emailVerificationAttempts = (user2.emailVerificationAttempts || 0) + 1;
+        const remaining = Math.max(0, 5 - user2.emailVerificationAttempts);
+        res.status(400).json({
+          success: false,
+          error: "INVALID_CODE",
+          message: remaining > 0 ? `Invalid verification code. ${remaining} attempt(s) remaining.` : "Too many failed attempts. Please request a new verification code."
+        });
+        return;
+      }
+      user2.isEmailVerified = true;
+      user2.emailVerificationCodeHash = void 0;
+      user2.emailVerificationExpiresAt = void 0;
+      user2.emailVerificationAttempts = 0;
+      user2.updatedAt = /* @__PURE__ */ new Date();
+      const accessToken2 = signAccessToken({
+        userId: user2.id,
+        email: user2.email,
+        role: user2.role
+      });
+      const refreshTokenValue2 = signRefreshToken({
+        userId: user2.id,
+        email: user2.email,
+        role: user2.role
+      });
+      setRefreshTokenCookie(res, refreshTokenValue2);
+      res.json({
+        success: true,
+        message: "Email successfully verified! Your account is now active.",
+        data: {
+          user: {
+            id: user2.id,
+            name: user2.name,
+            email: user2.email,
+            role: user2.role,
+            avatar: user2.avatar || DEFAULT_AVATAR,
+            aiCreditsRemaining: user2.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
+            isEmailVerified: true,
+            createdAt: user2.createdAt.toISOString(),
+            updatedAt: user2.updatedAt.toISOString()
+          },
+          token: accessToken2,
+          accessToken: accessToken2,
+          refreshToken: refreshTokenValue2
+        }
+      });
+      return;
+    }
+    const user = await User.findOne({ email: cleanEmail });
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        error: "No account found with this email address."
+      });
+      return;
+    }
+    if (user.isEmailVerified === true) {
+      res.status(400).json({
+        success: false,
+        error: "Account is already verified. You can sign in."
+      });
+      return;
+    }
+    if ((user.emailVerificationAttempts || 0) >= 5) {
+      res.status(429).json({
+        success: false,
+        error: "TOO_MANY_ATTEMPTS",
+        message: "Too many failed verification attempts. Please request a new verification code."
+      });
+      return;
+    }
+    if (!user.emailVerificationExpiresAt || new Date(user.emailVerificationExpiresAt).getTime() < Date.now()) {
+      res.status(400).json({
+        success: false,
+        error: "CODE_EXPIRED",
+        message: "Verification code has expired. Please request a new code."
+      });
+      return;
+    }
+    if (user.emailVerificationCodeHash !== codeHash) {
+      user.emailVerificationAttempts = (user.emailVerificationAttempts || 0) + 1;
+      await user.save();
+      const remaining = Math.max(0, 5 - user.emailVerificationAttempts);
+      res.status(400).json({
+        success: false,
+        error: "INVALID_CODE",
+        message: remaining > 0 ? `Invalid verification code. ${remaining} attempt(s) remaining.` : "Too many failed attempts. Please request a new verification code."
+      });
+      return;
+    }
+    user.isEmailVerified = true;
+    user.emailVerificationCodeHash = void 0;
+    user.emailVerificationExpiresAt = void 0;
+    user.emailVerificationAttempts = 0;
+    await user.save();
+    const accessToken = signAccessToken({
+      userId: user._id.toString(),
+      email: user.email,
+      role: user.role
+    });
+    const refreshTokenValue = signRefreshToken({
+      userId: user._id.toString(),
+      email: user.email,
+      role: user.role
+    });
+    setRefreshTokenCookie(res, refreshTokenValue);
+    res.json({
+      success: true,
+      message: "Email successfully verified! Your account is now active.",
+      data: {
+        user: {
+          id: user._id.toString(),
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          avatar: user.avatar || DEFAULT_AVATAR,
+          aiCreditsRemaining: user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
+          isEmailVerified: true,
+          createdAt: user.createdAt.toISOString(),
+          updatedAt: user.updatedAt.toISOString()
+        },
+        token: accessToken,
+        accessToken,
+        refreshToken: refreshTokenValue
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+async function resendVerification(req, res, next) {
+  try {
+    const { email } = req.body;
+    const cleanEmail = (email || "").toLowerCase().trim();
+    if (!cleanEmail) {
+      res.status(400).json({ success: false, error: "Email address is required." });
+      return;
+    }
+    let user = null;
+    if (isUsingMemoryDB()) {
+      user = memoryStore.users.find((u) => u.email === cleanEmail);
+    } else {
+      user = await User.findOne({ email: cleanEmail });
+    }
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        error: "No account found with this email address."
+      });
+      return;
+    }
+    if (user.isEmailVerified === true) {
+      res.status(400).json({
+        success: false,
+        error: "Account is already verified. Please sign in."
+      });
+      return;
+    }
+    if (user.emailVerificationLastSentAt) {
+      const elapsed = Date.now() - new Date(user.emailVerificationLastSentAt).getTime();
+      if (elapsed < 60 * 1e3) {
+        const waitSec = Math.ceil((60 * 1e3 - elapsed) / 1e3);
+        res.status(429).json({
+          success: false,
+          error: "RATE_LIMIT_COOLDOWN",
+          message: `Please wait ${waitSec} second(s) before requesting another verification code.`,
+          retryAfter: waitSec
+        });
+        return;
+      }
+    }
+    const verificationCode = generate6DigitCode();
+    const codeHash = hashCode(verificationCode);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1e3);
+    user.emailVerificationCodeHash = codeHash;
+    user.emailVerificationExpiresAt = expiresAt;
+    user.emailVerificationAttempts = 0;
+    user.emailVerificationLastSentAt = /* @__PURE__ */ new Date();
+    if (!isUsingMemoryDB()) {
+      await user.save();
+    }
+    await emailService.sendVerificationEmail(
+      user.email,
+      verificationCode,
+      user.name
+    );
+    res.json({
+      success: true,
+      message: "A new 6-digit verification code has been sent to your email."
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+async function forgotPassword(req, res, next) {
+  try {
+    const { email } = req.body;
+    const cleanEmail = (email || "").toLowerCase().trim();
+    if (!cleanEmail) {
+      res.status(400).json({ success: false, error: "Email address is required." });
+      return;
+    }
+    let user = null;
+    if (isUsingMemoryDB()) {
+      user = memoryStore.users.find((u) => u.email === cleanEmail);
+    } else {
+      user = await User.findOne({ email: cleanEmail });
+    }
+    if (!user) {
+      res.json({
+        success: true,
+        message: "If an account exists with this email address, a password reset link has been sent."
+      });
+      return;
+    }
+    if (user.passwordResetLastRequestedAt) {
+      const elapsed = Date.now() - new Date(user.passwordResetLastRequestedAt).getTime();
+      if (elapsed < 60 * 1e3) {
+        const waitSec = Math.ceil((60 * 1e3 - elapsed) / 1e3);
+        res.status(429).json({
+          success: false,
+          error: "RATE_LIMIT_COOLDOWN",
+          message: `Please wait ${waitSec} second(s) before requesting another reset link.`,
+          retryAfter: waitSec
+        });
+        return;
+      }
+    }
+    const rawToken = import_crypto.default.randomBytes(32).toString("hex");
+    const tokenHash = hashCode(rawToken);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1e3);
+    user.passwordResetTokenHash = tokenHash;
+    user.passwordResetExpiresAt = expiresAt;
+    user.passwordResetUsed = false;
+    user.passwordResetLastRequestedAt = /* @__PURE__ */ new Date();
+    if (!isUsingMemoryDB()) {
+      await user.save();
+    }
+    const host = req.get("host") || "localhost:3000";
+    const protocol = req.protocol === "https" || req.get("x-forwarded-proto") === "https" ? "https" : "http";
+    const baseUrl = process.env.APP_URL || `${protocol}://${host}`;
+    const resetUrl = `${baseUrl}/reset-password?token=${rawToken}&email=${encodeURIComponent(user.email)}`;
+    await emailService.sendPasswordResetEmail(user.email, resetUrl, user.name);
+    res.json({
+      success: true,
+      message: "If an account exists with this email address, a password reset link has been sent."
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+async function verifyResetToken(req, res, next) {
+  try {
+    const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+    const email = typeof req.query.email === "string" ? req.query.email.toLowerCase().trim() : "";
+    if (!token || !email) {
+      res.status(400).json({
+        success: false,
+        valid: false,
+        error: "Token and email parameters are required."
+      });
+      return;
+    }
+    const tokenHash = hashCode(token);
+    let user = null;
+    if (isUsingMemoryDB()) {
+      user = memoryStore.users.find((u) => u.email === email);
+    } else {
+      user = await User.findOne({ email });
+    }
+    console.log("RESET TOKEN DEBUG:", {
+      email,
+      tokenReceived: !!token,
+      tokenLength: token.length,
+      tokenHash,
+      userFound: !!user,
+      storedTokenHash: user?.passwordResetTokenHash,
+      tokenMatch: user?.passwordResetTokenHash === tokenHash,
+      passwordResetUsed: user?.passwordResetUsed,
+      expiresAt: user?.passwordResetExpiresAt,
+      now: /* @__PURE__ */ new Date()
+    });
+    if (!user || !user.passwordResetTokenHash || user.passwordResetTokenHash !== tokenHash || user.passwordResetUsed === true || !user.passwordResetExpiresAt || new Date(user.passwordResetExpiresAt).getTime() < Date.now()) {
+      res.status(400).json({
+        success: false,
+        valid: false,
+        error: "Password reset link is invalid, expired, or has already been used."
+      });
+      return;
+    }
+    res.json({
+      success: true,
+      valid: true,
+      message: "Reset token is valid."
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+async function resetPassword(req, res, next) {
+  try {
+    const { email, token, password } = req.body;
+    const cleanEmail = (email || "").toLowerCase().trim();
+    const cleanToken = (token || "").trim();
+    if (!cleanEmail || !cleanToken || !password) {
+      res.status(400).json({
+        success: false,
+        error: "Email, reset token, and new password are required."
+      });
+      return;
+    }
+    if (password.length < 6) {
+      res.status(400).json({
+        success: false,
+        error: "Password must be at least 6 characters long."
+      });
+      return;
+    }
+    const tokenHash = hashCode(cleanToken);
+    let user = null;
+    if (isUsingMemoryDB()) {
+      user = memoryStore.users.find((u) => u.email === cleanEmail);
+    } else {
+      user = await User.findOne({ email: cleanEmail });
+    }
+    if (!user || !user.passwordResetTokenHash || user.passwordResetTokenHash !== tokenHash || user.passwordResetUsed === true || !user.passwordResetExpiresAt || new Date(user.passwordResetExpiresAt).getTime() < Date.now()) {
+      res.status(400).json({
+        success: false,
+        error: "Password reset link is invalid, expired, or has already been used. Please request a new one."
+      });
+      return;
+    }
+    const newPasswordHash = await hashPassword(password);
+    user.passwordHash = newPasswordHash;
+    user.passwordResetUsed = true;
+    user.passwordResetTokenHash = void 0;
+    user.passwordResetExpiresAt = void 0;
+    user.isEmailVerified = true;
+    user.updatedAt = /* @__PURE__ */ new Date();
+    if (!isUsingMemoryDB()) {
+      await user.save();
+    }
+    res.json({
+      success: true,
+      message: "Your password has been successfully reset! You can now log in with your new password."
+    });
+  } catch (error) {
+    next(error);
+  }
+}
 
 // src/server/middleware/auth.ts
 function authMiddleware(req, res, next) {
@@ -1098,6 +1826,21 @@ var registerSchema = import_zod2.z.object({
 var loginSchema = import_zod2.z.object({
   email: import_zod2.z.string().email("Invalid email address"),
   password: import_zod2.z.string().min(1, "Password is required")
+});
+var verifyEmailSchema = import_zod2.z.object({
+  email: import_zod2.z.string().email("Invalid email address"),
+  code: import_zod2.z.string().regex(/^\d{6}$/, "Verification code must be a 6-digit number")
+});
+var resendVerificationSchema = import_zod2.z.object({
+  email: import_zod2.z.string().email("Invalid email address")
+});
+var forgotPasswordSchema = import_zod2.z.object({
+  email: import_zod2.z.string().email("Invalid email address")
+});
+var resetPasswordSchema = import_zod2.z.object({
+  email: import_zod2.z.string().email("Invalid email address"),
+  token: import_zod2.z.string().min(1, "Reset token is required"),
+  password: import_zod2.z.string().min(6, "Password must be at least 6 characters")
 });
 var updateProfileSchema = import_zod2.z.object({
   name: import_zod2.z.string().min(1).optional(),
@@ -1186,8 +1929,13 @@ var updateTemplateSchema = createTemplateSchema.partial();
 
 // src/server/routes/authRoutes.ts
 var router = (0, import_express.Router)();
-router.post("/register", validateRequest(registerSchema), register);
-router.post("/login", validateRequest(loginSchema), login);
+router.post("/register", authRateLimiter, validateRequest(registerSchema), register);
+router.post("/login", authRateLimiter, validateRequest(loginSchema), login);
+router.post("/verify-email", verificationRateLimiter, validateRequest(verifyEmailSchema), verifyEmail);
+router.post("/resend-verification", verificationRateLimiter, validateRequest(resendVerificationSchema), resendVerification);
+router.post("/forgot-password", passwordResetRateLimiter, validateRequest(forgotPasswordSchema), forgotPassword);
+router.get("/verify-reset-token", verifyResetToken);
+router.post("/reset-password", passwordResetRateLimiter, validateRequest(resetPasswordSchema), resetPassword);
 router.post("/refresh", refreshToken);
 router.post("/logout", logout);
 router.get("/me", authMiddleware, getMe);
@@ -2243,13 +2991,13 @@ async function createNotificationHelper(params) {
 }
 
 // src/server/utils/screenshotFingerprint.ts
-var import_crypto = __toESM(require("crypto"), 1);
+var import_crypto2 = __toESM(require("crypto"), 1);
 function generateScreenshotFingerprint(dataOrBuffer) {
   if (!dataOrBuffer) return "";
   try {
     if (Buffer.isBuffer(dataOrBuffer)) {
       if (dataOrBuffer.length === 0) return "";
-      return import_crypto.default.createHash("sha256").update(dataOrBuffer).digest("hex");
+      return import_crypto2.default.createHash("sha256").update(dataOrBuffer).digest("hex");
     }
     if (typeof dataOrBuffer === "string") {
       let base64 = dataOrBuffer.trim();
@@ -2260,9 +3008,9 @@ function generateScreenshotFingerprint(dataOrBuffer) {
       base64 = base64.replace(/\s+/g, "");
       const buffer = Buffer.from(base64, "base64");
       if (buffer.length > 0) {
-        return import_crypto.default.createHash("sha256").update(buffer).digest("hex");
+        return import_crypto2.default.createHash("sha256").update(buffer).digest("hex");
       }
-      return import_crypto.default.createHash("sha256").update(base64).digest("hex");
+      return import_crypto2.default.createHash("sha256").update(base64).digest("hex");
     }
   } catch (err) {
     console.error("[FINGERPRINT ERROR] Failed to compute binary fingerprint:", err);
@@ -2275,7 +3023,7 @@ function generateContentFingerprint(content) {
   }
   if (content.rawMessage && content.rawMessage.trim().length > 0) {
     const normText = content.rawMessage.trim().toLowerCase().replace(/\s+/g, " ");
-    return import_crypto.default.createHash("sha256").update(normText).digest("hex");
+    return import_crypto2.default.createHash("sha256").update(normText).digest("hex");
   }
   return "";
 }

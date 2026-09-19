@@ -1,14 +1,23 @@
-import mongoose, { Schema, Document } from "mongoose";
-import { PRO_PLAN_AI_CREDITS_LIMIT } from "../../shared/planConfig.js";
-import { DEFAULT_AVATAR } from "../../shared/types.js";
+import mongoose, { Schema, Document } from 'mongoose';
+import { PRO_PLAN_AI_CREDITS_LIMIT } from '../../shared/planConfig.js';
+import { DEFAULT_AVATAR } from '../../shared/types.js';
 
 export interface IUserDocument extends Document {
   email: string;
   passwordHash: string;
   name: string;
-  role: "freelancer" | "admin";
+  role: 'freelancer' | 'admin';
   avatar?: string;
   aiCreditsRemaining: number;
+  isEmailVerified: boolean;
+  emailVerificationCodeHash?: string;
+  emailVerificationExpiresAt?: Date;
+  emailVerificationAttempts: number;
+  emailVerificationLastSentAt?: Date;
+  passwordResetTokenHash?: string;
+  passwordResetExpiresAt?: Date;
+  passwordResetUsed: boolean;
+  passwordResetLastRequestedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,8 +43,8 @@ const UserSchema = new Schema<IUserDocument>(
     },
     role: {
       type: String,
-      enum: ["freelancer", "admin"],
-      default: "freelancer",
+      enum: ['freelancer', 'admin'],
+      default: 'freelancer',
     },
     avatar: {
       type: String,
@@ -45,11 +54,46 @@ const UserSchema = new Schema<IUserDocument>(
       type: Number,
       default: PRO_PLAN_AI_CREDITS_LIMIT,
     },
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerificationCodeHash: {
+      type: String,
+      required: false,
+    },
+    emailVerificationExpiresAt: {
+      type: Date,
+      required: false,
+    },
+    emailVerificationAttempts: {
+      type: Number,
+      default: 0,
+    },
+    emailVerificationLastSentAt: {
+      type: Date,
+      required: false,
+    },
+    passwordResetTokenHash: {
+      type: String,
+      required: false,
+    },
+    passwordResetExpiresAt: {
+      type: Date,
+      required: false,
+    },
+    passwordResetUsed: {
+      type: Boolean,
+      default: false,
+    },
+    passwordResetLastRequestedAt: {
+      type: Date,
+      required: false,
+    },
   },
   {
     timestamps: true,
-    bufferCommands: false,
-  },
+  }
 );
 
-export const User = mongoose.model<IUserDocument>("User", UserSchema);
+export const User = mongoose.model<IUserDocument>('User', UserSchema);

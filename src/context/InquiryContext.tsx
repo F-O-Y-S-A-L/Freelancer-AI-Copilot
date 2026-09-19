@@ -92,36 +92,73 @@ export const InquiryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     activeInquiry?.analysisResult?.aiSuggestedReply,
   ]);
 
-  const fetchInquiries = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+const fetchInquiries = useCallback(async () => {
+  setLoading(true);
+  setError(null);
+
+  try {
     const res = await api.getInquiries();
+
     if (res.success && res.data) {
-      setInquiries(res.data);
-      
+      // API may return either an array or a wrapped object.
+      const inquiriesData = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray((res.data as any).inquiries)
+        ? (res.data as any).inquiries
+        : Array.isArray((res.data as any).data)
+        ? (res.data as any).data
+        : [];
+
+      if (!Array.isArray(res.data)) {
+        console.error('Unexpected inquiries response shape:', res.data);
+      }
+
+      setInquiries(inquiriesData);
+
       // Check if URL has /app/inquiries/:id
       const pathParts = window.location.pathname.split('/');
-      const urlInquiryId = pathParts.length >= 4 && pathParts[1] === 'app' && pathParts[2] === 'inquiries' ? pathParts[3] : null;
-      
+      const urlInquiryId =
+        pathParts.length >= 4 &&
+        pathParts[1] === 'app' &&
+        pathParts[2] === 'inquiries'
+          ? pathParts[3]
+          : null;
+
       if (urlInquiryId) {
-        const found = res.data.find(
+        const found = inquiriesData.find(
           (i) => (i.id || (i as any)._id) === urlInquiryId
         );
+
         if (found) {
           setActiveInquiry(found);
-        } else if (res.data.length > 0) {
-          setActiveInquiry(res.data[0]);
-          window.history.replaceState(null, '', `/app/inquiries/${res.data[0].id || (res.data[0] as any)._id}`);
+        } else if (inquiriesData.length > 0) {
+          setActiveInquiry(inquiriesData[0]);
+
+          window.history.replaceState(
+            null,
+            '',
+            `/app/inquiries/${inquiriesData[0].id || (inquiriesData[0] as any)._id}`
+          );
         }
-      } else if (res.data.length > 0 && !activeInquiry) {
-        setActiveInquiry(res.data[0]);
-        window.history.replaceState(null, '', `/app/inquiries/${res.data[0].id || (res.data[0] as any)._id}`);
+      } else if (inquiriesData.length > 0 && !activeInquiry) {
+        setActiveInquiry(inquiriesData[0]);
+
+        window.history.replaceState(
+          null,
+          '',
+          `/app/inquiries/${inquiriesData[0].id || (inquiriesData[0] as any)._id}`
+        );
       }
     } else {
       setError(res.error || 'Failed to fetch inquiries.');
     }
+  } catch (err: any) {
+    console.error('Failed to fetch inquiries:', err);
+    setError(err?.message || 'Failed to fetch inquiries.');
+  } finally {
     setLoading(false);
-  }, []);
+  }
+}, [activeInquiry]);
 
   const selectInquiry = async (id: string | null) => {
     setAnalysisError(null);

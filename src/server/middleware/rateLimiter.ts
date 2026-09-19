@@ -125,6 +125,20 @@ export const authRateLimiter = createRateLimiter({
   message: 'Too many authentication attempts. Please wait 15 minutes before trying again.',
 });
 
+export const verificationRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // 15 attempts
+  keyPrefix: 'verify',
+  message: 'Too many verification attempts. Please wait 15 minutes before trying again.',
+});
+
+export const passwordResetRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts
+  keyPrefix: 'pwd-reset',
+  message: 'Too many password reset requests. Please wait 15 minutes before trying again.',
+});
+
 export const analysisRateLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 30, // 30 website analyses

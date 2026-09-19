@@ -2,25 +2,31 @@ import React, { useState } from 'react';
 import { Sparkles, Eye, EyeOff, RefreshCw, AlertCircle, ArrowRight } from 'lucide-react';
 
 interface LoginPageProps {
-  onLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  onLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string; requiresVerification?: boolean; email?: string }>;
   onSwitchToSignup: () => void;
+  onSwitchToForgotPassword?: () => void;
+  onSwitchToVerifyEmail?: (email: string) => void;
   isLoading?: boolean;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   onLogin,
   onSwitchToSignup,
+  onSwitchToForgotPassword,
+  onSwitchToVerifyEmail,
   isLoading = false,
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
+    setUnverifiedEmail('');
 
     if (!email.trim()) {
       setErrorMessage('Please enter your email address.');
@@ -35,7 +41,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     try {
       const res = await onLogin(email.trim(), password);
       if (!res.success) {
-        setErrorMessage(res.error || 'Invalid email or password.');
+        if (res.requiresVerification) {
+          setUnverifiedEmail(res.email || email.trim());
+          setErrorMessage(res.error || 'Your email address is not verified yet. Please enter your 6-digit verification code.');
+        } else {
+          setErrorMessage(res.error || 'Invalid email or password.');
+        }
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'A network error occurred. Please try again.');
@@ -80,7 +91,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             className="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-start gap-2.5"
           >
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            <div className="flex-1 font-medium">{errorMessage}</div>
+            <div className="flex-1 font-medium">
+              <div>{errorMessage}</div>
+              {unverifiedEmail && onSwitchToVerifyEmail && (
+                <button
+                  type="button"
+                  id="btn-goto-verify-email"
+                  onClick={() => onSwitchToVerifyEmail(unverifiedEmail)}
+                  className="mt-2 text-xs font-bold text-violet-700 hover:text-violet-900 underline flex items-center gap-1 cursor-pointer"
+                >
+                  <span>Enter verification code now</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -118,6 +142,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               >
                 Password
               </label>
+              {onSwitchToForgotPassword && (
+                <button
+                  type="button"
+                  id="btn-link-forgot-password"
+                  onClick={onSwitchToForgotPassword}
+                  disabled={isBusy}
+                  className="text-xs font-semibold text-violet-700 hover:text-violet-800 hover:underline transition cursor-pointer"
+                >
+                  Forgot password?
+                </button>
+              )}
             </div>
             <div className="relative">
               <input

@@ -1,59 +1,89 @@
-import React, { useState } from 'react';
-import { Sparkles, Eye, EyeOff, RefreshCw, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import React, { useState } from "react";
+import {
+  Sparkles,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+} from "lucide-react";
 
 interface SignupPageProps {
-  onRegister: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  onRegister: (
+    name: string,
+    email: string,
+    password: string,
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    requiresVerification?: boolean;
+    email?: string;
+  }>;
+  onRegistered?: (email: string) => void;
   onSwitchToLogin: () => void;
   isLoading?: boolean;
 }
 
 export const SignupPage: React.FC<SignupPageProps> = ({
   onRegister,
+  onRegistered,
   onSwitchToLogin,
   isLoading = false,
 }) => {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage('');
+    setErrorMessage("");
 
     if (!name.trim()) {
-      setErrorMessage('Please enter your full name.');
+      setErrorMessage("Please enter your full name.");
       return;
     }
     if (!email.trim()) {
-      setErrorMessage('Please enter a valid email address.');
+      setErrorMessage("Please enter a valid email address.");
       return;
     }
     if (!password) {
-      setErrorMessage('Please create a password.');
+      setErrorMessage("Please create a password.");
       return;
     }
     if (password.length < 6) {
-      setErrorMessage('Password must be at least 6 characters long.');
+      setErrorMessage("Password must be at least 6 characters long.");
       return;
     }
     if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match. Please verify both fields.');
+      setErrorMessage("Passwords do not match. Please verify both fields.");
       return;
     }
 
     setIsSubmitting(true);
     try {
       const res = await onRegister(name.trim(), email.trim(), password);
+
       if (!res.success) {
-        setErrorMessage(res.error || 'Registration failed. Please try again.');
+        setErrorMessage(res.error || "Registration failed. Please try again.");
+        return;
+      }
+
+      if (res.requiresVerification) {
+        if (onRegistered) {
+          onRegistered(email.trim());
+        }
+        return;
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || 'A network error occurred. Please try again.');
+      setErrorMessage(
+        err?.message || "A network error occurred. Please try again.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -114,7 +144,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({
               value={name}
               onChange={(e) => {
                 setName(e.target.value);
-                if (errorMessage) setErrorMessage('');
+                if (errorMessage) setErrorMessage("");
               }}
               required
               autoComplete="name"
@@ -138,7 +168,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
-                if (errorMessage) setErrorMessage('');
+                if (errorMessage) setErrorMessage("");
               }}
               required
               autoComplete="email"
@@ -159,11 +189,11 @@ export const SignupPage: React.FC<SignupPageProps> = ({
             <div className="relative">
               <input
                 id="signup-password"
-                type={showPassword ? 'text' : 'password'}
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
-                  if (errorMessage) setErrorMessage('');
+                  if (errorMessage) setErrorMessage("");
                 }}
                 required
                 autoComplete="new-password"
@@ -176,7 +206,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({
                 id="btn-toggle-signup-password"
                 onClick={() => setShowPassword((prev) => !prev)}
                 disabled={isBusy}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? "Hide password" : "Show password"}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600 focus:text-violet-600 focus:outline-none rounded-lg transition cursor-pointer disabled:cursor-not-allowed"
               >
                 {showPassword ? (
@@ -199,11 +229,11 @@ export const SignupPage: React.FC<SignupPageProps> = ({
             <div className="relative">
               <input
                 id="signup-confirm-password"
-                type={showConfirmPassword ? 'text' : 'password'}
+                type={showConfirmPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(e) => {
                   setConfirmPassword(e.target.value);
-                  if (errorMessage) setErrorMessage('');
+                  if (errorMessage) setErrorMessage("");
                 }}
                 required
                 autoComplete="new-password"
@@ -216,7 +246,11 @@ export const SignupPage: React.FC<SignupPageProps> = ({
                 id="btn-toggle-signup-confirm-password"
                 onClick={() => setShowConfirmPassword((prev) => !prev)}
                 disabled={isBusy}
-                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                aria-label={
+                  showConfirmPassword
+                    ? "Hide confirm password"
+                    : "Show confirm password"
+                }
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600 focus:text-violet-600 focus:outline-none rounded-lg transition cursor-pointer disabled:cursor-not-allowed"
               >
                 {showConfirmPassword ? (
@@ -252,7 +286,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({
         {/* Divider / Login Navigation */}
         <div className="mt-6 pt-5 border-t border-slate-100 text-center">
           <p className="text-xs text-slate-500">
-            Already have an account?{' '}
+            Already have an account?{" "}
             <button
               type="button"
               id="link-go-to-login"

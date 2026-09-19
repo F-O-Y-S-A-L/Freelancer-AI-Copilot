@@ -22,52 +22,52 @@ import {
 const KnowledgeBaseEditor = lazy(() =>
   import("./components/KnowledgeBaseEditor").then((m) => ({
     default: m.KnowledgeBaseEditor,
-  }))
+  })),
 );
 const OnboardingWizard = lazy(() =>
   import("./components/OnboardingWizard").then((m) => ({
     default: m.OnboardingWizard,
-  }))
+  })),
 );
 const InquiryWorkspace = lazy(() =>
   import("./components/dashboard/InquiryWorkspace").then((m) => ({
     default: m.InquiryWorkspace,
-  }))
+  })),
 );
 const AnalyticsDashboard = lazy(() =>
   import("./components/dashboard/AnalyticsDashboard").then((m) => ({
     default: m.AnalyticsDashboard,
-  }))
+  })),
 );
 const SettingsPage = lazy(() =>
   import("./components/settings/SettingsPage").then((m) => ({
     default: m.SettingsPage,
-  }))
+  })),
 );
 const PlansBillingPage = lazy(() =>
   import("./components/billing/PlansBillingPage").then((m) => ({
     default: m.PlansBillingPage,
-  }))
+  })),
 );
 const AITemplatesPage = lazy(() =>
   import("./components/templates/AITemplatesPage").then((m) => ({
     default: m.AITemplatesPage,
-  }))
+  })),
 );
 const FollowUpsPage = lazy(() =>
   import("./components/followups/FollowUpsPage").then((m) => ({
     default: m.FollowUpsPage,
-  }))
+  })),
 );
 const AuthPage = lazy(() =>
   import("./components/auth/AuthPage").then((m) => ({
     default: m.AuthPage,
-  }))
+  })),
 );
 const PublicWebsite = lazy(() =>
   import("./components/public/PublicWebsite").then((m) => ({
     default: m.PublicWebsite,
-  }))
+  })),
 );
 
 function TabLoadingFallback() {
@@ -75,7 +75,9 @@ function TabLoadingFallback() {
     <div className="flex-1 flex items-center justify-center p-12 text-slate-500">
       <div className="flex flex-col items-center space-y-3">
         <RefreshCw className="w-6 h-6 animate-spin text-violet-600" />
-        <span className="text-xs font-semibold text-slate-500">Loading module...</span>
+        <span className="text-xs font-semibold text-slate-500">
+          Loading module...
+        </span>
       </div>
     </div>
   );
@@ -108,11 +110,20 @@ function AuthenticatedWorkspace() {
     const handlePopState = () => {
       const path = window.location.pathname.toLowerCase();
       if (path.includes("/app/templates")) setActiveTab("templates");
-      else if (path.includes("/app/followups") || path.includes("/app/follow-ups")) setActiveTab("followups");
-      else if (path.includes("/app/knowledge-base") || path.includes("/app/knowledge")) setActiveTab("knowledge");
+      else if (
+        path.includes("/app/followups") ||
+        path.includes("/app/follow-ups")
+      )
+        setActiveTab("followups");
+      else if (
+        path.includes("/app/knowledge-base") ||
+        path.includes("/app/knowledge")
+      )
+        setActiveTab("knowledge");
       else if (path.includes("/app/analytics")) setActiveTab("analytics");
       else if (path.includes("/app/settings")) setActiveTab("settings");
-      else if (path.includes("/app/billing") || path.includes("/app/plans")) setActiveTab("billing");
+      else if (path.includes("/app/billing") || path.includes("/app/plans"))
+        setActiveTab("billing");
       else if (path.includes("/onboarding")) setActiveTab("onboarding");
       else setActiveTab("inquiries");
     };
@@ -330,7 +341,9 @@ function AuthenticatedWorkspace() {
             <span>Upgrade Plan</span>
           </button>
 
-          <NotificationDropdown onSelectInquiry={handleNotificationSelectInquiry} />
+          <NotificationDropdown
+            onSelectInquiry={handleNotificationSelectInquiry}
+          />
 
           <div className="w-px h-6 bg-slate-200" />
 
@@ -403,7 +416,9 @@ function AuthenticatedWorkspace() {
             )}
 
             {/* Tab 1: 3-Pane Inquiry Workspace */}
-            {!showOnboarding && activeTab === "inquiries" && <InquiryWorkspace />}
+            {!showOnboarding && activeTab === "inquiries" && (
+              <InquiryWorkspace />
+            )}
 
             {/* Tab 2: AI Templates */}
             {!showOnboarding && activeTab === "templates" && (
@@ -455,7 +470,9 @@ function AuthenticatedWorkspace() {
 
             {/* Tab 2: Follow-up Messages Management */}
             {!showOnboarding && activeTab === "followups" && (
-              <FollowUpsPage onSelectInquiry={handleNotificationSelectInquiry} />
+              <FollowUpsPage
+                onSelectInquiry={handleNotificationSelectInquiry}
+              />
             )}
 
             {/* Tab 4: Analytics Summary */}
@@ -507,7 +524,7 @@ function MainAppContent() {
 
   const handleNavigate = (path: string) => {
     window.history.pushState(null, "", path);
-    setCurrentPath(path);
+    setCurrentPath(window.location.pathname);
   };
 
   if (isLoading) {
@@ -528,9 +545,16 @@ function MainAppContent() {
 
   const normalized = currentPath.toLowerCase().replace(/\/+$/, "") || "/";
   const isAuthRoute =
-    normalized === "/login" || normalized === "/signup" || normalized === "/register";
+    normalized === "/login" ||
+    normalized === "/signup" ||
+    normalized === "/register" ||
+    normalized === "/verify-email" ||
+    normalized === "/forgot-password" ||
+    normalized === "/reset-password";
   const isProtectedRoute =
-    normalized === "/app" || normalized.startsWith("/app/") || normalized === "/onboarding";
+    normalized === "/app" ||
+    normalized.startsWith("/app/") ||
+    normalized === "/onboarding";
   const isPublicRoute =
     normalized === "/" ||
     normalized === "/features" ||
@@ -542,7 +566,10 @@ function MainAppContent() {
   if (!isAuthenticated) {
     if (isProtectedRoute) {
       // Direct access to protected /app/* routes -> redirect to /login
-      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      if (
+        typeof window !== "undefined" &&
+        window.location.pathname !== "/login"
+      ) {
         window.history.replaceState(null, "", "/login");
       }
       return (
@@ -553,7 +580,22 @@ function MainAppContent() {
     }
 
     if (isAuthRoute) {
-      const mode = normalized.includes("signup") || normalized.includes("register") ? "signup" : "login";
+      let mode:
+        | "login"
+        | "signup"
+        | "verify-email"
+        | "forgot-password"
+        | "reset-password" = "login";
+
+      if (normalized.includes("signup") || normalized.includes("register")) {
+        mode = "signup";
+      } else if (normalized.includes("verify-email")) {
+        mode = "verify-email";
+      } else if (normalized.includes("forgot-password")) {
+        mode = "forgot-password";
+      } else if (normalized.includes("reset-password")) {
+        mode = "reset-password";
+      }
       return (
         <Suspense fallback={<TabLoadingFallback />}>
           <AuthPage initialMode={mode} onNavigate={handleNavigate} />
@@ -572,7 +614,10 @@ function MainAppContent() {
   // Case 2: Authenticated visitors
   if (isAuthRoute) {
     // Authenticated user visits /login or /signup -> redirect to /app/inquiries
-    if (typeof window !== "undefined" && window.location.pathname !== "/app/inquiries") {
+    if (
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/app/inquiries"
+    ) {
       window.history.replaceState(null, "", "/app/inquiries");
     }
   } else if (isPublicRoute && normalized !== "/app") {

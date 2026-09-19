@@ -25,20 +25,26 @@ export async function connectDB(): Promise<void> {
     try {
       mongoose.set("strictQuery", true);
       mongoose.set("bufferCommands", false);
+
       await mongoose.connect(ENV.MONGODB_URI, {
         serverSelectionTimeoutMS: 5000,
       });
+
       if (mongoose.connection.readyState !== 1) {
         throw new Error(
           "MongoDB connection did not reach the connected state.",
         );
       }
+
       isConnected = true;
       isInMemoryMode = false;
+
       console.log("MongoDB connected successfully via Mongoose.");
 
       try {
         const { User } = await import("../models/User.js");
+
+        // Ensure existing users have the current AI credit limit
         await User.updateMany(
           {
             $or: [
@@ -46,15 +52,29 @@ export async function connectDB(): Promise<void> {
               { aiCreditsRemaining: { $lt: PRO_PLAN_AI_CREDITS_LIMIT } },
             ],
           },
-          { $set: { aiCreditsRemaining: PRO_PLAN_AI_CREDITS_LIMIT } },
+          {
+            $set: {
+              aiCreditsRemaining: PRO_PLAN_AI_CREDITS_LIMIT,
+            },
+          },
+        );
+
+        // Existing users created before email verification was introduced
+        // are treated as already verified.
+        await User.updateMany(
+          { isEmailVerified: { $exists: false } },
+          { $set: { isEmailVerified: true } },
         );
       } catch (migErr) {
-        console.warn("User credits migration notice:", migErr);
+        console.warn("User migration notice:", migErr);
       }
     } catch (error) {
       isConnected = false;
       isInMemoryMode = false;
+
       console.error("MongoDB connection failed:", error);
+
+      // Do not silently switch production to an in-memory database.
       throw error;
     } finally {
       connectionPromise = null;
@@ -86,5 +106,8 @@ export async function disconnectDB(): Promise<void> {
       // Ignore disconnection error
     }
   }
+
   isConnected = false;
+  isInMemoryMode = false;
+  connectionPromise = null;
 }

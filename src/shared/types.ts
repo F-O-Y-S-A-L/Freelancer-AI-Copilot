@@ -8,6 +8,7 @@ export interface IUser {
   role: 'freelancer' | 'admin';
   avatar?: string;
   aiCreditsRemaining?: number;
+  isEmailVerified?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -187,9 +188,11 @@ export interface IInquiry {
 }
 
 export interface IAuthResponse {
-  user: IUser;
-  token: string;
+  user?: IUser;
+  token?: string;
   refreshToken?: string;
+  requiresVerification?: boolean;
+  email?: string;
 }
 
 export interface IAnalyticsData {
