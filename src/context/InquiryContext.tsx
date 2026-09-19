@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { IInquiry, IInquiryAnalysis } from '../shared/types';
 import { api } from '../api/client';
 import { useAuth } from './AuthContext';
+import { renderTemplate, buildTemplateContext, validateTemplate } from '../shared/templateRenderer';
 
 interface InquiryContextType {
   inquiries: IInquiry[];
@@ -73,7 +74,7 @@ export const InquiryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isGeneratingReply, setIsGeneratingReply] = useState<boolean>(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
-  const { updateCredits } = useAuth();
+  const { updateCredits, user } = useAuth();
 
   // Sync draft and tone when activeInquiry changes
   useEffect(() => {
@@ -527,9 +528,18 @@ export const InquiryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const sendReplyAction = async (messageText?: string): Promise<boolean> => {
     if (!activeInquiry) return false;
     const targetId = activeInquiry.id || (activeInquiry as any)._id;
-    const contentToSend = (messageText !== undefined ? messageText : draft) || '';
+    const rawContent = (messageText !== undefined ? messageText : draft) || '';
 
-    if (!contentToSend.trim()) return false;
+    if (!rawContent.trim()) return false;
+
+    // Automatically resolve template placeholders with authenticated user and active client context
+    const templateContext = buildTemplateContext({ inquiry: activeInquiry, user });
+    const validation = validateTemplate(rawContent, templateContext);
+    if (!validation.isValid) {
+      console.warn('Cannot send reply with unresolved template placeholders:', validation.unresolvedVariables);
+      return false;
+    }
+    const contentToSend = renderTemplate(rawContent, templateContext);
 
     // Build updated analysisResult with aiSuggestedReply cleared,
     // preserving all other analysis results (clientWants, requiredSkills, matchedSkills, missingSkills, questionsToClarify, pricingEstimate, etc.)

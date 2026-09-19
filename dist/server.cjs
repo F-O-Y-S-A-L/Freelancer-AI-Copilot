@@ -36,10 +36,17 @@ var init_planConfig = __esm({
   }
 });
 
+// src/shared/templateRenderer.ts
+var init_templateRenderer = __esm({
+  "src/shared/templateRenderer.ts"() {
+  }
+});
+
 // src/shared/types.ts
 var DEFAULT_AVATAR;
 var init_types = __esm({
   "src/shared/types.ts"() {
+    init_templateRenderer();
     DEFAULT_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'><circle cx='32' cy='32' r='32' fill='%236D28D9'/><circle cx='32' cy='24' r='11' fill='%23FFFFFF'/><path d='M14 52C14 42 22 37 32 37C42 37 50 42 50 52' fill='%23FFFFFF'/></svg>";
   }
 });
@@ -110,20 +117,17 @@ var import_cors = __toESM(require("cors"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
 import_dotenv.default.config();
 var DEPRECATED_OR_UNAVAILABLE_MODELS = [
-  "gemini-2.5-flash",
   "gemini-2.0-flash",
   "gemini-2.0-flash-exp",
   "gemini-1.5-flash",
-  "gemini-1.5-pro",
-  "gemini-3.1-pro",
-  "gemini-3.1-pro-preview"
+  "gemini-1.5-pro"
 ];
 var rawModel = (process.env.GEMINI_MODEL || "").trim();
 var isDeprecatedPrimary = !rawModel || DEPRECATED_OR_UNAVAILABLE_MODELS.includes(rawModel);
-var resolvedModel = isDeprecatedPrimary ? "gemini-3.6-flash" : rawModel;
+var resolvedModel = isDeprecatedPrimary ? "gemini-2.5-flash" : rawModel;
 var rawFallback = (process.env.GEMINI_FALLBACK_MODEL || "").trim();
 var isDeprecatedFallback = !rawFallback || DEPRECATED_OR_UNAVAILABLE_MODELS.includes(rawFallback);
-var resolvedFallback = isDeprecatedFallback ? "gemini-3.7-flash" : rawFallback;
+var resolvedFallback = isDeprecatedFallback ? "gemini-2.5-flash-lite" : rawFallback;
 var nodeEnv = process.env.NODE_ENV || "development";
 var DEV_INSECURE_JWT_SECRET = "super-secret-jwt-key-change-in-production-12345";
 var mongodbUri = (process.env.MONGODB_URI || "").trim();
@@ -388,7 +392,9 @@ async function connectDB() {
         serverSelectionTimeoutMS: 5e3
       });
       if (import_mongoose2.default.connection.readyState !== 1) {
-        throw new Error("MongoDB connection did not reach the connected state.");
+        throw new Error(
+          "MongoDB connection did not reach the connected state."
+        );
       }
       isConnected = true;
       isInMemoryMode = false;
@@ -660,9 +666,14 @@ async function register(req, res, next) {
   try {
     const { name, email, password } = req.body;
     if (isUsingMemoryDB()) {
-      const existingUser2 = memoryStore.users.find((u) => u.email === email.toLowerCase());
+      const existingUser2 = memoryStore.users.find(
+        (u) => u.email === email.toLowerCase()
+      );
       if (existingUser2) {
-        res.status(400).json({ success: false, error: "User with this email already exists" });
+        res.status(400).json({
+          success: false,
+          error: "User with this email already exists"
+        });
         return;
       }
       const passwordHash2 = await hashPassword(password);
@@ -810,8 +821,9 @@ async function register(req, res, next) {
 async function login(req, res, next) {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = email.trim().toLowerCase();
     if (isUsingMemoryDB()) {
-      const user2 = memoryStore.users.find((u) => u.email === email.toLowerCase());
+      const user2 = memoryStore.users.find((u) => u.email === normalizedEmail);
       if (!user2) {
         res.status(401).json({ success: false, error: "Invalid email or password" });
         return;
@@ -853,7 +865,7 @@ async function login(req, res, next) {
       });
       return;
     }
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       res.status(401).json({ success: false, error: "Invalid email or password" });
       return;
@@ -1131,6 +1143,8 @@ var baseInquirySchema = import_zod2.z.object({
   clientName: import_zod2.z.string().min(1, "Client name is required"),
   clientEmail: import_zod2.z.string().email().optional().or(import_zod2.z.literal("")),
   subject: import_zod2.z.string().optional(),
+  projectName: import_zod2.z.string().optional(),
+  deliveryDate: import_zod2.z.string().optional(),
   rawMessage: import_zod2.z.string().optional(),
   sourceChannel: import_zod2.z.string().optional(),
   sourceType: import_zod2.z.enum(["screenshot", "text"]).optional().default("text"),
@@ -1385,6 +1399,14 @@ var InquirySchema = new import_mongoose4.Schema(
       trim: true,
       default: "New Client Project Inquiry"
     },
+    projectName: {
+      type: String,
+      trim: true
+    },
+    deliveryDate: {
+      type: String,
+      trim: true
+    },
     rawMessage: {
       type: String,
       required: true
@@ -1592,7 +1614,9 @@ var GeminiModelUnavailableError = class extends Error {
 };
 function getGeminiClient() {
   if (!ENV.GEMINI_API_KEY) {
-    throw new GeminiConfigError("GEMINI_API_KEY environment variable is required.");
+    throw new GeminiConfigError(
+      "GEMINI_API_KEY environment variable is required."
+    );
   }
   return new import_genai.GoogleGenAI({
     apiKey: ENV.GEMINI_API_KEY,
@@ -1621,8 +1645,11 @@ function delay(ms) {
 }
 function isQuotaExhaustedError(err) {
   if (!err) return false;
-  if (err instanceof GeminiQuotaExhaustedError || err.name === "GeminiQuotaExhaustedError") return true;
-  const code = Number(err.code || err.status || err.statusCode || err.error?.code);
+  if (err instanceof GeminiQuotaExhaustedError || err.name === "GeminiQuotaExhaustedError")
+    return true;
+  const code = Number(
+    err.code || err.status || err.statusCode || err.error?.code
+  );
   const statusStr = String(err.status || err.error?.status || "").toUpperCase();
   const message = String(err.message || err.error?.message || "").toLowerCase();
   let errorObjStr = "";
@@ -1649,7 +1676,9 @@ function isQuotaExhaustedError(err) {
     "rate_limit_exceeded",
     "limit: 20"
   ];
-  const hasQuotaKeyword = quotaKeywords.some((kw) => message.includes(kw) || errorObjStr.includes(kw));
+  const hasQuotaKeyword = quotaKeywords.some(
+    (kw) => message.includes(kw) || errorObjStr.includes(kw)
+  );
   if (isResourceExhausted || code === 429 && hasQuotaKeyword || hasQuotaKeyword) {
     return true;
   }
@@ -1660,8 +1689,11 @@ function isQuotaExhaustedError(err) {
 }
 function isModelNotFoundError(err) {
   if (!err) return false;
-  if (err instanceof GeminiModelUnavailableError || err.name === "GeminiModelUnavailableError") return true;
-  const code = Number(err.code || err.status || err.statusCode || err.error?.code);
+  if (err instanceof GeminiModelUnavailableError || err.name === "GeminiModelUnavailableError")
+    return true;
+  const code = Number(
+    err.code || err.status || err.statusCode || err.error?.code
+  );
   const statusStr = String(err.status || err.error?.status || "").toUpperCase();
   const message = String(err.message || err.error?.message || "").toLowerCase();
   return code === 404 || statusStr === "NOT_FOUND" || message.includes("not found") || message.includes("is no longer available") || message.includes("not_found") || message.includes("models/") && message.includes("not available");
@@ -1674,7 +1706,9 @@ function isTransientAvailabilityError(err) {
   if (isModelNotFoundError(err)) {
     return false;
   }
-  const code = Number(err.code || err.status || err.statusCode || err.error?.code);
+  const code = Number(
+    err.code || err.status || err.statusCode || err.error?.code
+  );
   const statusStr = String(err.status || err.error?.status || "").toUpperCase();
   const message = String(err.message || err.error?.message || "").toLowerCase();
   let errorObjStr = "";
@@ -1706,30 +1740,33 @@ function isTransientAvailabilityError(err) {
     "network error",
     "eai_again"
   ];
-  return transientKeywords.some((kw) => message.includes(kw) || errorObjStr.includes(kw));
+  return transientKeywords.some(
+    (kw) => message.includes(kw) || errorObjStr.includes(kw)
+  );
 }
 function getModelCandidates() {
   const disallowed = /* @__PURE__ */ new Set([
-    "gemini-2.5-flash",
     "gemini-2.0-flash",
     "gemini-2.0-flash-exp",
     "gemini-1.5-flash",
-    "gemini-1.5-pro",
-    "gemini-3.1-pro",
-    "gemini-3.1-pro-preview"
+    "gemini-1.5-pro"
   ]);
-  const primaryModel = (ENV.GEMINI_MODEL || "gemini-3.6-flash").trim();
-  const fallbackModel = (ENV.GEMINI_FALLBACK_MODEL || "gemini-3.7-flash").trim();
+  const primaryModel = (ENV.GEMINI_MODEL || "gemini-2.5-flash").trim();
+  const fallbackModel = (ENV.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash-lite").trim();
   const candidates = [];
   if (primaryModel && !disallowed.has(primaryModel)) {
     candidates.push(primaryModel);
   } else {
-    candidates.push("gemini-3.6-flash");
+    candidates.push("gemini-2.5-flash");
   }
   if (fallbackModel && !disallowed.has(fallbackModel) && !candidates.includes(fallbackModel)) {
     candidates.push(fallbackModel);
   }
-  const standardFallbacks = ["gemini-3.6-flash", "gemini-3.7-flash"];
+  const standardFallbacks = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-3.5-flash-lite"
+  ];
   for (const m of standardFallbacks) {
     if (!candidates.includes(m)) {
       candidates.push(m);
@@ -1753,19 +1790,28 @@ async function callGeminiWithRetryAndFallback(ai, requestConfig, maxRetriesPerMo
       } catch (err) {
         lastError = err;
         if (isQuotaExhaustedError(err)) {
-          console.warn("[GEMINI QUOTA] Provider quota exhausted. Skipping retry and fallback.");
+          console.warn(
+            "[GEMINI QUOTA] Provider quota exhausted. Skipping retry and fallback."
+          );
           throw new GeminiQuotaExhaustedError(
             "AI analysis cannot currently continue because the configured Gemini API quota has been exhausted. Please try again later or check your Gemini API plan."
           );
         }
         if (isModelNotFoundError(err)) {
-          console.error(`[GEMINI MODEL ERROR] Configured model is unavailable (${currentModel}):`, err?.message || err);
+          console.error(
+            `[GEMINI MODEL ERROR] Configured model is unavailable (${currentModel}):`,
+            err?.message || err
+          );
           const hasFallback = mIdx < modelsToTry.length - 1;
           if (hasFallback) {
-            console.warn(`[GEMINI FALLBACK] Switching to fallback model ${modelsToTry[mIdx + 1]}...`);
+            console.warn(
+              `[GEMINI FALLBACK] Switching to fallback model ${modelsToTry[mIdx + 1]}...`
+            );
             break;
           } else {
-            throw new GeminiModelUnavailableError(`Configured model ${currentModel} is unavailable.`);
+            throw new GeminiModelUnavailableError(
+              `Configured model ${currentModel} is unavailable.`
+            );
           }
         }
         if (isTransientAvailabilityError(err)) {
@@ -1788,7 +1834,10 @@ async function callGeminiWithRetryAndFallback(ai, requestConfig, maxRetriesPerMo
           }
           continue;
         }
-        console.error(`[GEMINI ERROR] Non-transient error with model ${currentModel}:`, err?.message || err);
+        console.error(
+          `[GEMINI ERROR] Non-transient error with model ${currentModel}:`,
+          err?.message || err
+        );
         throw err;
       }
     }
@@ -1867,8 +1916,14 @@ INCREMENTAL UPDATE INSTRUCTION: Integrate any new deliverables or updates from t
             items: {
               type: import_genai.Type.OBJECT,
               properties: {
-                name: { type: import_genai.Type.STRING, description: "Service or scope deliverable name" },
-                qty: { type: import_genai.Type.INTEGER, description: "Estimated quantity or unit count" }
+                name: {
+                  type: import_genai.Type.STRING,
+                  description: "Service or scope deliverable name"
+                },
+                qty: {
+                  type: import_genai.Type.INTEGER,
+                  description: "Estimated quantity or unit count"
+                }
               },
               required: ["name", "qty"]
             },
@@ -1900,7 +1955,9 @@ INCREMENTAL UPDATE INSTRUCTION: Integrate any new deliverables or updates from t
   try {
     parsedJson = JSON.parse(textOutput);
   } catch (err) {
-    throw new Error("Failed to parse Gemini requirement extraction JSON response.");
+    throw new Error(
+      "Failed to parse Gemini requirement extraction JSON response."
+    );
   }
   const validated = ExtractionZodSchema.parse(parsedJson);
   return {
@@ -2055,8 +2112,14 @@ async function translateAnalysisToBengali(analysis) {
         items: {
           type: import_genai.Type.OBJECT,
           properties: {
-            item: { type: import_genai.Type.STRING, description: "Item description translated into Bengali" },
-            price: { type: import_genai.Type.NUMBER, description: "Exact same numerical price amount" }
+            item: {
+              type: import_genai.Type.STRING,
+              description: "Item description translated into Bengali"
+            },
+            price: {
+              type: import_genai.Type.NUMBER,
+              description: "Exact same numerical price amount"
+            }
           },
           required: ["item", "price"]
         },
@@ -2095,7 +2158,10 @@ async function translateAnalysisToBengali(analysis) {
     }
     parsed = JSON.parse(cleanText);
   } catch (parseErr) {
-    console.warn("[AI TRANSLATION] Error parsing Gemini JSON translation response:", parseErr);
+    console.warn(
+      "[AI TRANSLATION] Error parsing Gemini JSON translation response:",
+      parseErr
+    );
     parsed = {};
   }
   const translatedResult = {
@@ -2686,7 +2752,11 @@ function logAiAnalysisError(inquiryId, stage, error) {
     upstreamDetailsStr = error.stack;
   } else if (typeof error === "object" && error !== null) {
     try {
-      upstreamDetailsStr = JSON.stringify(error, Object.getOwnPropertyNames(error), 2);
+      upstreamDetailsStr = JSON.stringify(
+        error,
+        Object.getOwnPropertyNames(error),
+        2
+      );
     } catch {
       upstreamDetailsStr = String(error);
     }
@@ -2694,7 +2764,10 @@ function logAiAnalysisError(inquiryId, stage, error) {
     upstreamDetailsStr = String(error);
   }
   if (ENV.GEMINI_API_KEY && ENV.GEMINI_API_KEY.trim().length > 0) {
-    upstreamDetailsStr = upstreamDetailsStr.replaceAll(ENV.GEMINI_API_KEY, "[REDACTED_API_KEY]");
+    upstreamDetailsStr = upstreamDetailsStr.replaceAll(
+      ENV.GEMINI_API_KEY,
+      "[REDACTED_API_KEY]"
+    );
   }
   console.error(
     `
@@ -2804,14 +2877,20 @@ async function createInquiry(req, res, next) {
     if (isUsingMemoryDB()) {
       let resolvedClient2 = null;
       if (clientId && clientId !== "new") {
-        resolvedClient2 = memoryStore.clients.find((c) => (c.id === clientId || c._id === clientId) && c.userId === userId);
+        resolvedClient2 = memoryStore.clients.find(
+          (c) => (c.id === clientId || c._id === clientId) && c.userId === userId
+        );
       }
       if (!resolvedClient2) {
         if (inputEmail) {
-          resolvedClient2 = memoryStore.clients.find((c) => c.userId === userId && c.email?.toLowerCase() === inputEmail);
+          resolvedClient2 = memoryStore.clients.find(
+            (c) => c.userId === userId && c.email?.toLowerCase() === inputEmail
+          );
         }
         if (!resolvedClient2 && inputName) {
-          resolvedClient2 = memoryStore.clients.find((c) => c.userId === userId && c.name?.toLowerCase() === inputName.toLowerCase());
+          resolvedClient2 = memoryStore.clients.find(
+            (c) => c.userId === userId && c.name?.toLowerCase() === inputName.toLowerCase()
+          );
         }
       }
       if (resolvedClient2) {
@@ -2919,7 +2998,11 @@ async function createInquiry(req, res, next) {
         message: "A new client inquiry is ready for review.",
         inquiryId: inqId
       });
-      res.status(201).json({ success: true, message: "Inquiry created successfully", data: newInquiry });
+      res.status(201).json({
+        success: true,
+        message: "Inquiry created successfully",
+        data: newInquiry
+      });
       return;
     }
     let resolvedClient = null;
@@ -2954,12 +3037,20 @@ async function createInquiry(req, res, next) {
     const resolvedClientEmail = resolvedClient ? resolvedClient.email || inputEmail : inputEmail;
     const clientConditions = [];
     if (resolvedClientId) clientConditions.push({ clientId: resolvedClientId });
-    if (resolvedClientEmail) clientConditions.push({ clientEmail: resolvedClientEmail });
-    if (resolvedClientName) clientConditions.push({ clientName: { $regex: new RegExp("^" + escapeRegex(resolvedClientName) + "$", "i") } });
+    if (resolvedClientEmail)
+      clientConditions.push({ clientEmail: resolvedClientEmail });
+    if (resolvedClientName)
+      clientConditions.push({
+        clientName: {
+          $regex: new RegExp("^" + escapeRegex(resolvedClientName) + "$", "i")
+        }
+      });
     const existingInquiry = await Inquiry.findOne({
       userId,
       $or: clientConditions,
-      subject: { $regex: new RegExp("^" + escapeRegex(targetSubject) + "$", "i") }
+      subject: {
+        $regex: new RegExp("^" + escapeRegex(targetSubject) + "$", "i")
+      }
     });
     if (existingInquiry) {
       res.status(200).json({
@@ -3027,7 +3118,11 @@ async function createInquiry(req, res, next) {
       message: "A new client inquiry is ready for review.",
       inquiryId: inquiry._id.toString()
     });
-    res.status(201).json({ success: true, message: "Inquiry created successfully", data: inquiry });
+    res.status(201).json({
+      success: true,
+      message: "Inquiry created successfully",
+      data: inquiry
+    });
   } catch (error) {
     next(error);
   }
@@ -3037,12 +3132,17 @@ async function getInquiryById(req, res, next) {
     const userId = req.userId;
     const { id } = req.params;
     if (isUsingMemoryDB()) {
-      const inq = memoryStore.inquiries.find((i) => i.id === id && i.userId === userId);
+      const inq = memoryStore.inquiries.find(
+        (i) => i.id === id && i.userId === userId
+      );
       if (!inq) {
         res.status(404).json({ success: false, error: "Inquiry not found" });
         return;
       }
-      res.json({ success: true, data: { ...inq, starred: Boolean(inq.starred) } });
+      res.json({
+        success: true,
+        data: { ...inq, starred: Boolean(inq.starred) }
+      });
       return;
     }
     const inquiry = await Inquiry.findOne({ _id: id, userId });
@@ -3051,7 +3151,10 @@ async function getInquiryById(req, res, next) {
       return;
     }
     const inquiryObj = inquiry.toObject ? inquiry.toObject() : inquiry;
-    res.json({ success: true, data: { ...inquiryObj, starred: Boolean(inquiryObj.starred) } });
+    res.json({
+      success: true,
+      data: { ...inquiryObj, starred: Boolean(inquiryObj.starred) }
+    });
   } catch (error) {
     next(error);
   }
@@ -3062,7 +3165,9 @@ async function updateInquiry(req, res, next) {
     const { id } = req.params;
     const updates = req.body;
     if (isUsingMemoryDB()) {
-      const inq = memoryStore.inquiries.find((i) => i.id === id && i.userId === userId);
+      const inq = memoryStore.inquiries.find(
+        (i) => i.id === id && i.userId === userId
+      );
       if (!inq) {
         res.status(404).json({ success: false, error: "Inquiry not found" });
         return;
@@ -3320,7 +3425,9 @@ async function deleteInquiry(req, res, next) {
     const userId = req.userId;
     const { id } = req.params;
     if (isUsingMemoryDB()) {
-      const index = memoryStore.inquiries.findIndex((i) => i.id === id && i.userId === userId);
+      const index = memoryStore.inquiries.findIndex(
+        (i) => i.id === id && i.userId === userId
+      );
       if (index === -1) {
         res.status(404).json({ success: false, error: "Inquiry not found" });
         return;
@@ -3347,24 +3454,38 @@ async function analyzeInquiry(req, res, next) {
   let remainingCredits = 0;
   let currentStage = "init";
   try {
-    console.log(`[AI ANALYSIS] Starting screenshot-aware analysis for inquiry: ${id}`);
-    console.log(`GEMINI_API_KEY configured: ${Boolean(ENV.GEMINI_API_KEY && ENV.GEMINI_API_KEY.trim().length > 0)}`);
-    console.log(`GEMINI_MODEL: ${ENV.GEMINI_MODEL || "gemini-3.6-flash"}`);
+    console.log(
+      `[AI ANALYSIS] Starting screenshot-aware analysis for inquiry: ${id}`
+    );
+    console.log(
+      `GEMINI_API_KEY configured: ${Boolean(ENV.GEMINI_API_KEY && ENV.GEMINI_API_KEY.trim().length > 0)}`
+    );
+    console.log(`GEMINI_MODEL: ${ENV.GEMINI_MODEL || "gemini-2.5-flash"}`);
     let inquiry = null;
     let profile = null;
     if (isUsingMemoryDB()) {
-      inquiry = memoryStore.inquiries.find((i) => i.id === id && i.userId === userId);
+      inquiry = memoryStore.inquiries.find(
+        (i) => i.id === id && i.userId === userId
+      );
       profile = memoryStore.profiles.find((p) => p.userId === userId);
     } else {
       inquiry = await Inquiry.findOne({ _id: id, userId });
       profile = await UserProfile.findOne({ userId });
     }
     if (!inquiry) {
-      res.status(404).json({ success: false, error: "INQUIRY_NOT_FOUND", message: "Inquiry not found" });
+      res.status(404).json({
+        success: false,
+        error: "INQUIRY_NOT_FOUND",
+        message: "Inquiry not found"
+      });
       return;
     }
     if (!profile) {
-      res.status(404).json({ success: false, error: "PROFILE_NOT_FOUND", message: "User profile not found" });
+      res.status(404).json({
+        success: false,
+        error: "PROFILE_NOT_FOUND",
+        message: "User profile not found"
+      });
       return;
     }
     if (!inquiry.analyzedScreenshots) inquiry.analyzedScreenshots = [];
@@ -3372,7 +3493,9 @@ async function analyzeInquiry(req, res, next) {
     if (!inquiry.conversationHistory || inquiry.conversationHistory.length === 0) {
       inquiry.conversationHistory = getConversationTimeline(inquiry);
     }
-    const hasIncomingScreenshot = Boolean(req.body && req.body.screenshotData && req.body.screenshotData.trim().length > 0);
+    const hasIncomingScreenshot = Boolean(
+      req.body && req.body.screenshotData && req.body.screenshotData.trim().length > 0
+    );
     const targetScreenshotData = hasIncomingScreenshot ? req.body.screenshotData : inquiry.screenshotData;
     const targetMimeType = hasIncomingScreenshot ? req.body.screenshotMimeType || "image/png" : inquiry.screenshotMimeType || "image/png";
     const targetFileName = hasIncomingScreenshot ? req.body.fileName || `Fiverr_Attachment_${(inquiry.clientAttachments?.length || 0) + 1}.png` : "Fiverr_Conversation_Screenshot.png";
@@ -3380,7 +3503,9 @@ async function analyzeInquiry(req, res, next) {
       screenshotData: targetScreenshotData,
       rawMessage: inquiry.rawMessage
     });
-    console.log(`[AI ANALYSIS] Target fingerprint: ${targetFingerprint ? targetFingerprint.substring(0, 16) + "..." : "none"} (isNewUpload: ${hasIncomingScreenshot})`);
+    console.log(
+      `[AI ANALYSIS] Target fingerprint: ${targetFingerprint ? targetFingerprint.substring(0, 16) + "..." : "none"} (isNewUpload: ${hasIncomingScreenshot})`
+    );
     if (inquiry.analyzedScreenshots.length === 0 && inquiry.analysisResult) {
       const legacyFp = generateContentFingerprint({
         screenshotData: inquiry.screenshotData,
@@ -3395,10 +3520,12 @@ async function analyzeInquiry(req, res, next) {
             clientWants: inquiry.analysisResult.clientWants || [],
             extractedSkillsRequired: inquiry.analysisResult.requiredSkills || [],
             scopeComplexity: inquiry.analysisResult.scopeComplexity || "medium",
-            detectedItems: inquiry.analysisResult.pricingEstimate?.breakdown?.map((b) => ({
-              name: typeof b.item === "string" ? b.item.replace(/\s*\(x\d+\)$/, "") : b.item,
-              qty: b.qty || 1
-            })) || [],
+            detectedItems: inquiry.analysisResult.pricingEstimate?.breakdown?.map(
+              (b) => ({
+                name: typeof b.item === "string" ? b.item.replace(/\s*\(x\d+\)$/, "") : b.item,
+                qty: b.qty || 1
+              })
+            ) || [],
             informationToClarify: inquiry.analysisResult.questionsToClarify || [],
             extractedMessageText: inquiry.analysisResult.extractedMessageText || inquiry.extractedMessageText || ""
           },
@@ -3408,14 +3535,20 @@ async function analyzeInquiry(req, res, next) {
       }
     }
     const alreadyAnalyzed = Boolean(
-      targetFingerprint && (inquiry.analyzedScreenshots || []).some((item) => item.fingerprint === targetFingerprint)
+      targetFingerprint && (inquiry.analyzedScreenshots || []).some(
+        (item) => item.fingerprint === targetFingerprint
+      )
     );
     if (alreadyAnalyzed && inquiry.analysisResult) {
-      console.log(`[AI ANALYSIS] Screenshot already analyzed (fingerprint: ${targetFingerprint.substring(0, 12)}...). Reusing stored authoritative analysis without credit deduction.`);
+      console.log(
+        `[AI ANALYSIS] Screenshot already analyzed (fingerprint: ${targetFingerprint.substring(0, 12)}...). Reusing stored authoritative analysis without credit deduction.`
+      );
       if (hasIncomingScreenshot) {
-        const isAlreadyInAttachments = (inquiry.clientAttachments || []).some((att) => {
-          return generateScreenshotFingerprint(att.data) === targetFingerprint;
-        });
+        const isAlreadyInAttachments = (inquiry.clientAttachments || []).some(
+          (att) => {
+            return generateScreenshotFingerprint(att.data) === targetFingerprint;
+          }
+        );
         if (!isAlreadyInAttachments) {
           const newAtt = {
             id: "att_" + Date.now() + Math.random().toString(36).substring(2, 6),
@@ -3430,7 +3563,9 @@ async function analyzeInquiry(req, res, next) {
       }
       let currentCredits = 0;
       if (isUsingMemoryDB()) {
-        const u = memoryStore.users.find((user) => user.id === userId || user._id === userId);
+        const u = memoryStore.users.find(
+          (user) => user.id === userId || user._id === userId
+        );
         currentCredits = u?.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT;
       } else {
         const u = await User.findById(userId);
@@ -3445,7 +3580,9 @@ async function analyzeInquiry(req, res, next) {
       return;
     }
     if (isUsingMemoryDB()) {
-      memUser = memoryStore.users.find((u) => u.id === userId || u._id === userId);
+      memUser = memoryStore.users.find(
+        (u) => u.id === userId || u._id === userId
+      );
       if (!memUser || (memUser.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT) < 1) {
         res.status(402).json({
           success: false,
@@ -3508,7 +3645,9 @@ async function analyzeInquiry(req, res, next) {
       });
     }
     currentStage = "extractRequirements";
-    console.log("[AI ANALYSIS] Running Gemini extraction for new screenshot/content...");
+    console.log(
+      "[AI ANALYSIS] Running Gemini extraction for new screenshot/content..."
+    );
     const extractionParams = {
       freelancerProfession: profile.profession
     };
@@ -3524,10 +3663,12 @@ async function analyzeInquiry(req, res, next) {
       extractionParams.existingAnalysis = {
         clientWants: inquiry.analysisResult.clientWants,
         requiredSkills: inquiry.analysisResult.requiredSkills,
-        detectedItems: inquiry.analysisResult.pricingEstimate?.breakdown?.map((b) => ({
-          name: typeof b.item === "string" ? b.item.replace(/\s*\(x\d+\)$/, "") : b.item,
-          qty: b.qty || 1
-        })),
+        detectedItems: inquiry.analysisResult.pricingEstimate?.breakdown?.map(
+          (b) => ({
+            name: typeof b.item === "string" ? b.item.replace(/\s*\(x\d+\)$/, "") : b.item,
+            qty: b.qty || 1
+          })
+        ),
         scopeComplexity: inquiry.analysisResult.scopeComplexity || "medium",
         questionsToClarify: inquiry.analysisResult.questionsToClarify
       };
@@ -3550,7 +3691,9 @@ async function analyzeInquiry(req, res, next) {
     };
     inquiry.analyzedScreenshots.push(screenshotRecord);
     currentStage = "mergeAnalyses";
-    const allAnalysesToMerge = (inquiry.analyzedScreenshots || []).map((s) => s.analysisResult);
+    const allAnalysesToMerge = (inquiry.analyzedScreenshots || []).map(
+      (s) => s.analysisResult
+    );
     const mergedOutput = mergeCumulativeAnalyses({
       allAnalyses: allAnalysesToMerge,
       userProfile: profile
@@ -3650,7 +3793,10 @@ async function analyzeInquiry(req, res, next) {
       if (isUsingMemoryDB() && memUser) {
         memUser.aiCreditsRemaining = (memUser.aiCreditsRemaining || 0) + 1;
       } else {
-        await User.updateOne({ _id: userId }, { $inc: { aiCreditsRemaining: 1 } }).catch(() => {
+        await User.updateOne(
+          { _id: userId },
+          { $inc: { aiCreditsRemaining: 1 } }
+        ).catch(() => {
         });
       }
     }
@@ -3696,18 +3842,28 @@ async function generateInquiryReply(req, res, next) {
     let inquiry = null;
     let profile = null;
     if (isUsingMemoryDB()) {
-      inquiry = memoryStore.inquiries.find((i) => i.id === id && i.userId === userId);
+      inquiry = memoryStore.inquiries.find(
+        (i) => i.id === id && i.userId === userId
+      );
       profile = memoryStore.profiles.find((p) => p.userId === userId);
     } else {
       inquiry = await Inquiry.findOne({ _id: id, userId });
       profile = await UserProfile.findOne({ userId });
     }
     if (!inquiry) {
-      res.status(404).json({ success: false, error: "INQUIRY_NOT_FOUND", message: "Inquiry not found" });
+      res.status(404).json({
+        success: false,
+        error: "INQUIRY_NOT_FOUND",
+        message: "Inquiry not found"
+      });
       return;
     }
     if (!profile) {
-      res.status(404).json({ success: false, error: "PROFILE_NOT_FOUND", message: "User profile not found" });
+      res.status(404).json({
+        success: false,
+        error: "PROFILE_NOT_FOUND",
+        message: "User profile not found"
+      });
       return;
     }
     if (!inquiry.analysisResult) {
@@ -3719,7 +3875,9 @@ async function generateInquiryReply(req, res, next) {
       return;
     }
     if (isUsingMemoryDB()) {
-      memUser = memoryStore.users.find((u) => u.id === userId || u._id === userId);
+      memUser = memoryStore.users.find(
+        (u) => u.id === userId || u._id === userId
+      );
       if (!memUser || (memUser.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT) < 1) {
         res.status(402).json({
           success: false,
@@ -3805,7 +3963,10 @@ async function generateInquiryReply(req, res, next) {
       if (isUsingMemoryDB() && memUser) {
         memUser.aiCreditsRemaining = (memUser.aiCreditsRemaining || 0) + 1;
       } else {
-        await User.updateOne({ _id: userId }, { $inc: { aiCreditsRemaining: 1 } }).catch(() => {
+        await User.updateOne(
+          { _id: userId },
+          { $inc: { aiCreditsRemaining: 1 } }
+        ).catch(() => {
         });
       }
     }
@@ -3841,7 +4002,9 @@ async function translateInquiryAnalysis(req, res, next) {
   try {
     const userId = req.userId;
     const targetLanguage = req.body?.targetLanguage || "bn";
-    console.log(`[AI TRANSLATION] Translating inquiry analysis ${id} to ${targetLanguage} for user: ${userId}`);
+    console.log(
+      `[AI TRANSLATION] Translating inquiry analysis ${id} to ${targetLanguage} for user: ${userId}`
+    );
     let inquiry = null;
     if (isUsingMemoryDB()) {
       inquiry = memoryStore.inquiries.find(
@@ -3872,7 +4035,11 @@ async function translateInquiryAnalysis(req, res, next) {
     }
     if (!inquiry) {
       console.warn(`[AI TRANSLATION] Inquiry not found for ID: ${id}`);
-      res.status(404).json({ success: false, error: "INQUIRY_NOT_FOUND", message: "Inquiry not found" });
+      res.status(404).json({
+        success: false,
+        error: "INQUIRY_NOT_FOUND",
+        message: "Inquiry not found"
+      });
       return;
     }
     if (!inquiry.analysisResult) {
@@ -3884,7 +4051,9 @@ async function translateInquiryAnalysis(req, res, next) {
       return;
     }
     if (inquiry.analysisResult.translations && inquiry.analysisResult.translations[targetLanguage]) {
-      console.log(`[AI TRANSLATION] Returning cached translation for inquiry ${id}`);
+      console.log(
+        `[AI TRANSLATION] Returning cached translation for inquiry ${id}`
+      );
       res.json({
         success: true,
         message: "Analysis translation retrieved from cache",
@@ -3893,8 +4062,12 @@ async function translateInquiryAnalysis(req, res, next) {
       });
       return;
     }
-    console.log(`[AI TRANSLATION] Requesting Gemini translation for inquiry ${id}...`);
-    const translatedAnalysis = await translateAnalysisToBengali(inquiry.analysisResult);
+    console.log(
+      `[AI TRANSLATION] Requesting Gemini translation for inquiry ${id}...`
+    );
+    const translatedAnalysis = await translateAnalysisToBengali(
+      inquiry.analysisResult
+    );
     if (!inquiry.analysisResult.translations) {
       inquiry.analysisResult.translations = {};
     }
@@ -3920,7 +4093,9 @@ async function translateInquiryAnalysis(req, res, next) {
         inquiry.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
       }
     }
-    console.log(`[AI TRANSLATION] Analysis translation saved successfully for inquiry ${id}`);
+    console.log(
+      `[AI TRANSLATION] Analysis translation saved successfully for inquiry ${id}`
+    );
     res.json({
       success: true,
       message: "Analysis translated successfully",
@@ -4586,7 +4761,9 @@ async function getTemplates(req, res, next) {
   try {
     const userId = req.userId;
     if (isUsingMemoryDB()) {
-      const userTemplates = (memoryStore.templates || []).filter((t) => t.userId === userId).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      const userTemplates = (memoryStore.templates || []).filter((t) => t.userId === userId).sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
       res.json({ success: true, data: userTemplates });
       return;
     }
@@ -4601,7 +4778,7 @@ async function createTemplate(req, res, next) {
     const userId = req.userId;
     const { title, description, content, category } = req.body;
     const trimmedTitle = (title || "").trim();
-    const trimmedContent = (content || "").trim();
+    const templateContent = typeof content === "string" ? content : "";
     const trimmedCategory = (category || "Custom").trim();
     const trimmedDescription = (description || "").trim();
     if (isUsingMemoryDB()) {
@@ -4612,7 +4789,7 @@ async function createTemplate(req, res, next) {
         userId,
         title: trimmedTitle,
         description: trimmedDescription,
-        content: trimmedContent,
+        content: templateContent,
         category: trimmedCategory,
         createdAt: /* @__PURE__ */ new Date(),
         updatedAt: /* @__PURE__ */ new Date()
@@ -4632,7 +4809,7 @@ async function createTemplate(req, res, next) {
       userId,
       title: trimmedTitle,
       description: trimmedDescription,
-      content: trimmedContent,
+      content: templateContent,
       category: trimmedCategory
     });
     res.status(201).json({
@@ -4685,7 +4862,9 @@ async function updateTemplate(req, res, next) {
       const existing = memoryStore.templates[index];
       if (title !== void 0) existing.title = title.trim();
       if (description !== void 0) existing.description = description.trim();
-      if (content !== void 0) existing.content = content.trim();
+      if (content !== void 0) {
+        existing.content = typeof content === "string" ? content : "";
+      }
       if (category !== void 0) existing.category = category.trim();
       existing.updatedAt = /* @__PURE__ */ new Date();
       memoryStore.templates[index] = existing;
@@ -4703,7 +4882,8 @@ async function updateTemplate(req, res, next) {
     }
     if (title !== void 0) template.title = title.trim();
     if (description !== void 0) template.description = description.trim();
-    if (content !== void 0) template.content = content.trim();
+    if (content !== void 0)
+      template.content = typeof content === "string" ? content : "";
     if (category !== void 0) template.category = category.trim();
     await template.save();
     res.json({

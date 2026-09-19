@@ -60,6 +60,8 @@ const baseInquirySchema = z.object({
   clientName: z.string().min(1, 'Client name is required'),
   clientEmail: z.string().email().optional().or(z.literal('')),
   subject: z.string().optional(),
+  projectName: z.string().optional(),
+  deliveryDate: z.string().optional(),
   rawMessage: z.string().optional(),
   sourceChannel: z.string().optional(),
   sourceType: z.enum(['screenshot', 'text']).optional().default('text'),

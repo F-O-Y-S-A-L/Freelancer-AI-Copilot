@@ -161,6 +161,8 @@ export interface IInquiry {
   clientName: string;
   clientEmail?: string;
   subject?: string;
+  projectName?: string;
+  deliveryDate?: string;
   rawMessage: string;
   sourceChannel?: string;
   sourceType?: 'screenshot' | 'text';
@@ -340,5 +342,7 @@ export interface IFollowUpSummary {
   noResponseCount: number;
   totalActiveFollowUps: number;
 }
+
+export * from './templateRenderer.js';
 
 

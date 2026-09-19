@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   User,
   Mail,
@@ -19,13 +19,16 @@ import {
   Image as ImageIcon,
   LayoutTemplate,
   ChevronDown,
+  AlertTriangle,
 } from "lucide-react";
 import { useInquiry } from "../../context/InquiryContext";
+import { useAuth } from "../../context/AuthContext";
 import { useNotifications } from "../../context/NotificationContext";
 import { useToast } from "../../context/ToastContext";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import { IClientAttachment, IInquiry, ITemplate } from "../../shared/types";
 import { api } from "../../api/client";
+import { renderTemplate, buildTemplateContext, validateTemplate } from "../../shared/templateRenderer";
 
 function getConversationTimeline(inquiry: IInquiry): Array<{
   id: string;
@@ -207,6 +210,7 @@ export const ConversationPane: React.FC = () => {
   } = useInquiry();
 
   const { syncInquiryRead } = useNotifications();
+  const { user } = useAuth();
   const { showToast } = useToast();
 
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
@@ -267,9 +271,11 @@ export const ConversationPane: React.FC = () => {
   }, []);
 
   const handleApplyTemplate = (tpl: ITemplate) => {
-    setDraft(tpl.content);
+    const context = buildTemplateContext({ inquiry: activeInquiry, user });
+    const resolved = renderTemplate(tpl.content, context);
+    setDraft(resolved);
     setIsTemplateMenuOpen(false);
-    showToast(`Template "${tpl.title}" inserted into draft.`, 'success');
+    showToast(`Template "${tpl.title}" inserted with resolved client variables.`, 'success');
   };
 
   const handleScreenshotSelect = async (
@@ -394,13 +400,30 @@ export const ConversationPane: React.FC = () => {
     }
   };
 
+  const templateValidation = useMemo(() => {
+    if (!draft || !draft.includes("{{")) return { isValid: true, unresolvedVariables: [] };
+    const context = buildTemplateContext({ inquiry: activeInquiry, user });
+    return validateTemplate(draft, context);
+  }, [draft, activeInquiry, user]);
+
   const handleSendReply = async () => {
-    const textToSend = draft.trim();
-    if (!textToSend) {
+    const rawText = draft.trim();
+    if (!rawText) {
       showToast("Please enter a message before sending", "error");
       return;
     }
-    const success = await sendReplyAction(textToSend);
+    // Automatically resolve any dynamic template variables using authenticated user & client context
+    const context = buildTemplateContext({ inquiry: activeInquiry, user });
+    const validation = validateTemplate(rawText, context);
+    if (!validation.isValid) {
+      showToast(
+        `Cannot send reply with unresolved placeholder(s): ${validation.unresolvedVariables.map((v) => `{{${v}}}`).join(", ")}. Please resolve or remove them before sending.`,
+        "error"
+      );
+      return;
+    }
+    const resolvedText = renderTemplate(rawText, context);
+    const success = await sendReplyAction(resolvedText);
     if (success) {
       showToast("Reply sent and marked as Replied", "success");
     } else {
@@ -705,6 +728,22 @@ export const ConversationPane: React.FC = () => {
               })}
             </div>
           </div>
+
+          {/* Dynamic Template Validation Warning Banner */}
+          {!templateValidation.isValid && (
+            <div className="flex items-start gap-2.5 p-3 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs text-amber-800 animate-in fade-in">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-semibold text-amber-900">
+                  Unresolved Template Variable{templateValidation.unresolvedVariables.length > 1 ? "s" : ""}:
+                </p>
+                <p className="text-[11px] text-amber-700">
+                  {templateValidation.unresolvedVariables.map((v) => `{{${v}}}`).join(", ")}
+                  {" "}cannot be resolved from current client context. Please replace or remove them before sending.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Reply Draft Textarea */}
           <div className="relative">

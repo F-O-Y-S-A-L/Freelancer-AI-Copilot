@@ -2,25 +2,22 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const DEPRECATED_OR_UNAVAILABLE_MODELS = [
-  "gemini-2.5-flash",
   "gemini-2.0-flash",
   "gemini-2.0-flash-exp",
   "gemini-1.5-flash",
   "gemini-1.5-pro",
-  "gemini-3.1-pro",
-  "gemini-3.1-pro-preview",
 ];
 
 const rawModel = (process.env.GEMINI_MODEL || "").trim();
 const isDeprecatedPrimary =
   !rawModel || DEPRECATED_OR_UNAVAILABLE_MODELS.includes(rawModel);
-const resolvedModel = isDeprecatedPrimary ? "gemini-3.6-flash" : rawModel;
+const resolvedModel = isDeprecatedPrimary ? "gemini-2.5-flash" : rawModel;
 
 const rawFallback = (process.env.GEMINI_FALLBACK_MODEL || "").trim();
 const isDeprecatedFallback =
   !rawFallback || DEPRECATED_OR_UNAVAILABLE_MODELS.includes(rawFallback);
 const resolvedFallback = isDeprecatedFallback
-  ? "gemini-3.7-flash"
+  ? "gemini-2.5-flash-lite"
   : rawFallback;
 
 const nodeEnv = process.env.NODE_ENV || "development";

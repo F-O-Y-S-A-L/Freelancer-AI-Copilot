@@ -1,7 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
-import { User } from '../models/User.js';
-import { UserProfile } from '../models/UserProfile.js';
-import { hashPassword, comparePassword } from '../utils/passwords.js';
+import { Request, Response, NextFunction } from "express";
+import { User } from "../models/User.js";
+import { UserProfile } from "../models/UserProfile.js";
+import { hashPassword, comparePassword } from "../utils/passwords.js";
 import {
   signToken,
   signAccessToken,
@@ -9,45 +9,52 @@ import {
   verifyRefreshToken,
   revokeToken,
   JwtPayload,
-} from '../utils/jwt.js';
-import { AuthenticatedRequest } from '../middleware/auth.js';
-import { isUsingMemoryDB, memoryStore } from '../config/db.js';
-import { ENV } from '../config/env.js';
-import { PRO_PLAN_AI_CREDITS_LIMIT } from '../../shared/planConfig.js';
-import { DEFAULT_AVATAR } from '../../shared/types.js';
+} from "../utils/jwt.js";
+import { AuthenticatedRequest } from "../middleware/auth.js";
+import { isUsingMemoryDB, memoryStore } from "../config/db.js";
+import { ENV } from "../config/env.js";
+import { PRO_PLAN_AI_CREDITS_LIMIT } from "../../shared/planConfig.js";
+import { DEFAULT_AVATAR } from "../../shared/types.js";
 
-export function setRefreshTokenCookie(res: Response, refreshToken: string): void {
-  const isProd = ENV.NODE_ENV === 'production';
+export function setRefreshTokenCookie(
+  res: Response,
+  refreshToken: string,
+): void {
+  const isProd = ENV.NODE_ENV === "production";
   const cookieParts = [
     `refreshToken=${encodeURIComponent(refreshToken)}`,
-    'HttpOnly',
-    'Path=/api/auth',
-    'SameSite=Lax',
-    'Max-Age=604800', // 7 days in seconds
+    "HttpOnly",
+    "Path=/api/auth",
+    "SameSite=Lax",
+    "Max-Age=604800", // 7 days in seconds
   ];
   if (isProd) {
-    cookieParts.push('Secure');
+    cookieParts.push("Secure");
   }
-  res.setHeader('Set-Cookie', cookieParts.join('; '));
+  res.setHeader("Set-Cookie", cookieParts.join("; "));
 }
 
 export function clearRefreshTokenCookie(res: Response): void {
-  const isProd = ENV.NODE_ENV === 'production';
+  const isProd = ENV.NODE_ENV === "production";
   const cookieParts = [
-    'refreshToken=',
-    'HttpOnly',
-    'Path=/api/auth',
-    'SameSite=Lax',
-    'Max-Age=0',
+    "refreshToken=",
+    "HttpOnly",
+    "Path=/api/auth",
+    "SameSite=Lax",
+    "Max-Age=0",
   ];
   if (isProd) {
-    cookieParts.push('Secure');
+    cookieParts.push("Secure");
   }
-  res.setHeader('Set-Cookie', cookieParts.join('; '));
+  res.setHeader("Set-Cookie", cookieParts.join("; "));
 }
 
 export function extractRefreshToken(req: Request): string | null {
-  if (req.body && typeof req.body.refreshToken === 'string' && req.body.refreshToken.trim()) {
+  if (
+    req.body &&
+    typeof req.body.refreshToken === "string" &&
+    req.body.refreshToken.trim()
+  ) {
     return req.body.refreshToken.trim();
   }
   const cookieHeader = req.headers.cookie;
@@ -63,20 +70,28 @@ export function extractRefreshToken(req: Request): string | null {
 export async function register(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   try {
     const { name, email, password } = req.body;
 
     if (isUsingMemoryDB()) {
-      const existingUser = memoryStore.users.find((u) => u.email === email.toLowerCase());
+      const existingUser = memoryStore.users.find(
+        (u) => u.email === email.toLowerCase(),
+      );
       if (existingUser) {
-        res.status(400).json({ success: false, error: 'User with this email already exists' });
+        res
+          .status(400)
+          .json({
+            success: false,
+            error: "User with this email already exists",
+          });
         return;
       }
 
       const passwordHash = await hashPassword(password);
-      const userId = 'mem_' + Date.now() + Math.random().toString(36).substr(2, 4);
+      const userId =
+        "mem_" + Date.now() + Math.random().toString(36).substr(2, 4);
 
       const newUser = {
         id: userId,
@@ -84,7 +99,7 @@ export async function register(
         name,
         email: email.toLowerCase(),
         passwordHash,
-        role: 'freelancer',
+        role: "freelancer",
         avatar: DEFAULT_AVATAR,
         aiCreditsRemaining: PRO_PLAN_AI_CREDITS_LIMIT,
         createdAt: new Date(),
@@ -95,12 +110,12 @@ export async function register(
 
       // Default profile
       const defaultProfile = {
-        id: 'prof_' + userId,
+        id: "prof_" + userId,
         userId: userId,
-        profession: '',
-        bio: '',
+        profession: "",
+        bio: "",
         avatar: DEFAULT_AVATAR,
-        experienceLevel: 'mid',
+        experienceLevel: "mid",
         skills: [],
         toolsAndFrameworks: [],
         supportedWork: [],
@@ -110,12 +125,12 @@ export async function register(
           minProjectPrice: 0,
           hourlyRate: 0,
           rushOrderMultiplier: 1.0,
-          currency: 'USD',
+          currency: "USD",
         },
         businessRules: [],
         maxRevisions: 0,
         depositPercentage: 0,
-        communicationTone: 'friendly',
+        communicationTone: "friendly",
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -137,7 +152,7 @@ export async function register(
 
       res.status(201).json({
         success: true,
-        message: 'Account registered successfully',
+        message: "Account registered successfully",
         data: {
           user: {
             id: newUser.id,
@@ -159,7 +174,9 @@ export async function register(
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
-      res.status(400).json({ success: false, error: 'User with this email already exists' });
+      res
+        .status(400)
+        .json({ success: false, error: "User with this email already exists" });
       return;
     }
 
@@ -168,17 +185,17 @@ export async function register(
       name,
       email: email.toLowerCase(),
       passwordHash,
-      role: 'freelancer',
+      role: "freelancer",
       avatar: DEFAULT_AVATAR,
     });
 
     // Create default UserProfile
     await UserProfile.create({
       userId: user._id,
-      profession: '',
-      bio: '',
+      profession: "",
+      bio: "",
       avatar: DEFAULT_AVATAR,
-      experienceLevel: 'mid',
+      experienceLevel: "mid",
       skills: [],
       toolsAndFrameworks: [],
       supportedWork: [],
@@ -188,12 +205,12 @@ export async function register(
         minProjectPrice: 0,
         hourlyRate: 0,
         rushOrderMultiplier: 1.0,
-        currency: 'USD',
+        currency: "USD",
       },
       businessRules: [],
       maxRevisions: 0,
       depositPercentage: 0,
-      communicationTone: 'friendly',
+      communicationTone: "friendly",
     });
 
     const accessToken = signAccessToken({
@@ -211,7 +228,7 @@ export async function register(
 
     res.status(201).json({
       success: true,
-      message: 'Account registered successfully',
+      message: "Account registered successfully",
       data: {
         user: {
           id: user._id.toString(),
@@ -219,7 +236,8 @@ export async function register(
           email: user.email,
           role: user.role,
           avatar: user.avatar || DEFAULT_AVATAR,
-          aiCreditsRemaining: user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
+          aiCreditsRemaining:
+            user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
           createdAt: user.createdAt.toISOString(),
           updatedAt: user.updatedAt.toISOString(),
         },
@@ -236,21 +254,26 @@ export async function register(
 export async function login(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = email.trim().toLowerCase();
 
     if (isUsingMemoryDB()) {
-      const user = memoryStore.users.find((u) => u.email === email.toLowerCase());
+      const user = memoryStore.users.find((u) => u.email === normalizedEmail);
       if (!user) {
-        res.status(401).json({ success: false, error: 'Invalid email or password' });
+        res
+          .status(401)
+          .json({ success: false, error: "Invalid email or password" });
         return;
       }
 
       const isMatch = await comparePassword(password, user.passwordHash);
       if (!isMatch) {
-        res.status(401).json({ success: false, error: 'Invalid email or password' });
+        res
+          .status(401)
+          .json({ success: false, error: "Invalid email or password" });
         return;
       }
 
@@ -269,7 +292,7 @@ export async function login(
 
       res.json({
         success: true,
-        message: 'Logged in successfully',
+        message: "Logged in successfully",
         data: {
           user: {
             id: user.id,
@@ -277,7 +300,8 @@ export async function login(
             email: user.email,
             role: user.role,
             avatar: user.avatar || DEFAULT_AVATAR,
-            aiCreditsRemaining: user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
+            aiCreditsRemaining:
+              user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
             createdAt: user.createdAt.toISOString(),
             updatedAt: user.updatedAt.toISOString(),
           },
@@ -289,15 +313,19 @@ export async function login(
       return;
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
-      res.status(401).json({ success: false, error: 'Invalid email or password' });
+      res
+        .status(401)
+        .json({ success: false, error: "Invalid email or password" });
       return;
     }
 
     const isMatch = await comparePassword(password, user.passwordHash);
     if (!isMatch) {
-      res.status(401).json({ success: false, error: 'Invalid email or password' });
+      res
+        .status(401)
+        .json({ success: false, error: "Invalid email or password" });
       return;
     }
 
@@ -316,7 +344,7 @@ export async function login(
 
     res.json({
       success: true,
-      message: 'Logged in successfully',
+      message: "Logged in successfully",
       data: {
         user: {
           id: user._id.toString(),
@@ -324,7 +352,8 @@ export async function login(
           email: user.email,
           role: user.role,
           avatar: user.avatar || DEFAULT_AVATAR,
-          aiCreditsRemaining: user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
+          aiCreditsRemaining:
+            user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
           createdAt: user.createdAt.toISOString(),
           updatedAt: user.updatedAt.toISOString(),
         },
@@ -341,7 +370,7 @@ export async function login(
 export async function getMe(
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   try {
     const userId = req.userId;
@@ -349,7 +378,7 @@ export async function getMe(
     if (isUsingMemoryDB()) {
       const user = memoryStore.users.find((u) => u.id === userId);
       if (!user) {
-        res.status(404).json({ success: false, error: 'User not found' });
+        res.status(404).json({ success: false, error: "User not found" });
         return;
       }
 
@@ -361,7 +390,8 @@ export async function getMe(
           email: user.email,
           role: user.role,
           avatar: user.avatar || DEFAULT_AVATAR,
-          aiCreditsRemaining: user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
+          aiCreditsRemaining:
+            user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
           createdAt: user.createdAt.toISOString(),
           updatedAt: user.updatedAt.toISOString(),
         },
@@ -369,9 +399,9 @@ export async function getMe(
       return;
     }
 
-    const user = await User.findById(userId).select('-passwordHash');
+    const user = await User.findById(userId).select("-passwordHash");
     if (!user) {
-      res.status(404).json({ success: false, error: 'User not found' });
+      res.status(404).json({ success: false, error: "User not found" });
       return;
     }
 
@@ -383,7 +413,8 @@ export async function getMe(
         email: user.email,
         role: user.role,
         avatar: user.avatar || DEFAULT_AVATAR,
-        aiCreditsRemaining: user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
+        aiCreditsRemaining:
+          user.aiCreditsRemaining ?? PRO_PLAN_AI_CREDITS_LIMIT,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString(),
       },
@@ -396,12 +427,14 @@ export async function getMe(
 export async function refreshToken(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   try {
     const token = extractRefreshToken(req);
     if (!token) {
-      res.status(401).json({ success: false, error: 'Refresh token is required' });
+      res
+        .status(401)
+        .json({ success: false, error: "Refresh token is required" });
       return;
     }
 
@@ -409,7 +442,9 @@ export async function refreshToken(
     try {
       payload = verifyRefreshToken(token);
     } catch {
-      res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
+      res
+        .status(401)
+        .json({ success: false, error: "Invalid or expired refresh token" });
       return;
     }
 
@@ -418,7 +453,7 @@ export async function refreshToken(
 
     // Verify user still exists
     let userExists = false;
-    let userRole = payload.role || 'freelancer';
+    let userRole = payload.role || "freelancer";
     let userEmail = payload.email;
 
     if (isUsingMemoryDB()) {
@@ -438,7 +473,9 @@ export async function refreshToken(
     }
 
     if (!userExists) {
-      res.status(401).json({ success: false, error: 'User account no longer exists' });
+      res
+        .status(401)
+        .json({ success: false, error: "User account no longer exists" });
       return;
     }
 
@@ -458,7 +495,7 @@ export async function refreshToken(
 
     res.json({
       success: true,
-      message: 'Token refreshed successfully',
+      message: "Token refreshed successfully",
       data: {
         token: newAccessToken,
         accessToken: newAccessToken,
@@ -473,7 +510,7 @@ export async function refreshToken(
 export async function logout(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   try {
     const token = extractRefreshToken(req);
@@ -483,8 +520,8 @@ export async function logout(
 
     // Also revoke accessToken if provided in Authorization header
     const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const accessToken = authHeader.split(' ')[1];
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const accessToken = authHeader.split(" ")[1];
       if (accessToken) {
         revokeToken(accessToken);
       }
@@ -494,10 +531,9 @@ export async function logout(
 
     res.json({
       success: true,
-      message: 'Logged out successfully',
+      message: "Logged out successfully",
     });
   } catch (error) {
     next(error);
   }
 }
-

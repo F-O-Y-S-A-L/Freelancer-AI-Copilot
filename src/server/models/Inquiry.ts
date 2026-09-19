@@ -6,6 +6,8 @@ export interface IInquiryDocument extends Document {
   clientName: string;
   clientEmail?: string;
   subject?: string;
+  projectName?: string;
+  deliveryDate?: string;
   rawMessage: string;
   sourceChannel?: string;
   sourceType?: 'screenshot' | 'text';
@@ -56,6 +58,14 @@ const InquirySchema = new Schema<IInquiryDocument>(
       type: String,
       trim: true,
       default: 'New Client Project Inquiry',
+    },
+    projectName: {
+      type: String,
+      trim: true,
+    },
+    deliveryDate: {
+      type: String,
+      trim: true,
     },
     rawMessage: {
       type: String,

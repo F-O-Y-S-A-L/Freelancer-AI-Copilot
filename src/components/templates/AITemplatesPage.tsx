@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   LayoutTemplate,
   Plus,
@@ -15,59 +15,42 @@ import {
   X,
   MessageSquare,
   Sparkles,
-  ArrowRight,
   Filter,
-} from 'lucide-react';
-import { api } from '../../api/client';
-import { ITemplate, TemplateCategory } from '../../shared/types';
-import { useInquiry } from '../../context/InquiryContext';
-import { useToast } from '../../context/ToastContext';
-import { ConfirmModal } from '../ui/ConfirmModal';
+  AlertCircle,
+} from "lucide-react";
+import { api } from "../../api/client";
+import { ITemplate, TemplateCategory } from "../../shared/types";
+import { useInquiry } from "../../context/InquiryContext";
+import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
+import { ConfirmModal } from "../ui/ConfirmModal";
+import {
+  renderTemplate,
+  buildTemplateContext,
+} from "../../shared/templateRenderer";
 
 const STANDARD_CATEGORIES: TemplateCategory[] = [
-  'First Response',
-  'Follow-up',
-  'Pricing',
-  'Project Details',
-  'Revision',
-  'Delivery',
-  'Thank You',
-  'Custom',
-];
-
-// Completely profession-neutral starter examples (user-triggered only, never auto-injected)
-const NEUTRAL_STARTER_EXAMPLES: Array<{
-  title: string;
-  category: TemplateCategory;
-  description: string;
-  content: string;
-}> = [
-  {
-    title: 'Initial Inquiry Acknowledgment',
-    category: 'First Response',
-    description: 'Polite initial greeting thanking the client and requesting key project details.',
-    content:
-      'Hi [Client Name],\n\nThank you for reaching out! I would love to learn more about your project goals and timeline.\n\nCould you share a few more details about your specific deliverables and preferred turnaround time? Once I have a clear picture, I can provide a precise proposal and next steps.\n\nBest regards,\n[Your Name]',
-  },
-  {
-    title: 'Friendly Follow-up Check-in',
-    category: 'Follow-up',
-    description: 'Gentle check-in on a previously submitted proposal or inquiry.',
-    content:
-      'Hi [Client Name],\n\nI wanted to quickly follow up regarding the project details we discussed. Do you have any questions about the scope or timeline?\n\nI am ready to get started whenever you are ready to proceed.\n\nBest regards,\n[Your Name]',
-  },
-  {
-    title: 'Project Delivery & Next Steps',
-    category: 'Delivery',
-    description: 'Professional wrap-up message when delivering completed milestones.',
-    content:
-      'Hi [Client Name],\n\nI am pleased to share that the deliverables for your project are completed and ready for your review!\n\nPlease take a look at the attached files and let me know if you would like any minor refinements.\n\nThank you for the opportunity to collaborate!\n\nBest regards,\n[Your Name]',
-  },
+  "First Response",
+  "Follow-up",
+  "Pricing",
+  "Project Details",
+  "Revision",
+  "Delivery",
+  "Thank You",
+  "Custom",
 ];
 
 interface AITemplatesPageProps {
   onUseTemplate?: (template: ITemplate) => void;
-  onNavigateTab?: (tab: 'inquiries' | 'templates' | 'knowledge' | 'clients' | 'analytics' | 'settings') => void;
+  onNavigateTab?: (
+    tab:
+      | "inquiries"
+      | "templates"
+      | "knowledge"
+      | "clients"
+      | "analytics"
+      | "settings",
+  ) => void;
 }
 
 export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
@@ -75,29 +58,40 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
   onNavigateTab,
 }) => {
   const { setDraft, activeInquiry } = useInquiry();
+  const { user } = useAuth();
   const { showToast } = useToast();
 
   const [templates, setTemplates] = useState<ITemplate[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   // Create / Edit Modal State
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [editingTemplate, setEditingTemplate] = useState<ITemplate | null>(null);
-  const [formTitle, setFormTitle] = useState<string>('');
-  const [formCategory, setFormCategory] = useState<string>('First Response');
-  const [formCustomCategory, setFormCustomCategory] = useState<string>('');
-  const [formDescription, setFormDescription] = useState<string>('');
-  const [formContent, setFormContent] = useState<string>('');
+  const [editingTemplate, setEditingTemplate] = useState<ITemplate | null>(
+    null,
+  );
+  const [formTitle, setFormTitle] = useState<string>("");
+  const [formCategory, setFormCategory] = useState<string>("First Response");
+  const [formCustomCategory, setFormCustomCategory] = useState<string>("");
+  const [formDescription, setFormDescription] = useState<string>("");
+  const [formContent, setFormContent] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [formError, setFormError] = useState<string>('');
+  const [formError, setFormError] = useState<string>("");
+
+  const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const currentContext = useMemo(
+    () => buildTemplateContext({ inquiry: activeInquiry, user }),
+    [activeInquiry, user],
+  );
 
   // Delete Confirmation State
-  const [deletingTemplate, setDeletingTemplate] = useState<ITemplate | null>(null);
+  const [deletingTemplate, setDeletingTemplate] = useState<ITemplate | null>(
+    null,
+  );
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
-  // Copied preview indicator
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Fetch templates from server
@@ -108,10 +102,10 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
       if (res.success && res.data) {
         setTemplates(res.data);
       } else {
-        showToast(res.error || 'Failed to load templates', 'error');
+        showToast(res.error || "Failed to load templates", "error");
       }
     } catch (err: any) {
-      showToast(err.message || 'Error loading templates', 'error');
+      showToast(err.message || "Error loading templates", "error");
     } finally {
       setLoading(false);
     }
@@ -125,7 +119,10 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
   const allCategories = useMemo(() => {
     const customSet = new Set<string>();
     templates.forEach((t) => {
-      if (t.category && !STANDARD_CATEGORIES.includes(t.category as TemplateCategory)) {
+      if (
+        t.category &&
+        !STANDARD_CATEGORIES.includes(t.category as TemplateCategory)
+      ) {
         customSet.add(t.category);
       }
     });
@@ -136,7 +133,7 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
   const filteredTemplates = useMemo(() => {
     return templates.filter((t) => {
       const matchesCategory =
-        selectedCategory === 'all' ||
+        selectedCategory === "all" ||
         t.category?.toLowerCase() === selectedCategory.toLowerCase();
 
       const query = searchQuery.trim().toLowerCase();
@@ -154,12 +151,12 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
   // Open Create Modal
   const handleOpenCreate = () => {
     setEditingTemplate(null);
-    setFormTitle('');
-    setFormCategory('First Response');
-    setFormCustomCategory('');
-    setFormDescription('');
-    setFormContent('');
-    setFormError('');
+    setFormTitle("");
+    setFormCategory("First Response");
+    setFormCustomCategory("");
+    setFormDescription("");
+    setFormContent("");
+    setFormError("");
     setIsModalOpen(true);
   };
 
@@ -169,35 +166,35 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
     setFormTitle(template.title);
     if (STANDARD_CATEGORIES.includes(template.category as TemplateCategory)) {
       setFormCategory(template.category);
-      setFormCustomCategory('');
+      setFormCustomCategory("");
     } else {
-      setFormCategory('Custom');
-      setFormCustomCategory(template.category || '');
+      setFormCategory("Custom");
+      setFormCustomCategory(template.category || "");
     }
-    setFormDescription(template.description || '');
+    setFormDescription(template.description || "");
     setFormContent(template.content);
-    setFormError('');
+    setFormError("");
     setIsModalOpen(true);
   };
 
   // Handle Form Submit (Create or Update)
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFormError('');
+    setFormError("");
 
     const trimmedTitle = formTitle.trim();
-    const trimmedContent = formContent.trim();
+    const templateContent = formContent;
     const resolvedCategory =
-      formCategory === 'Custom'
-        ? (formCustomCategory.trim() || 'Custom')
+      formCategory === "Custom"
+        ? formCustomCategory.trim() || "Custom"
         : formCategory;
 
     if (!trimmedTitle) {
-      setFormError('Template title cannot be empty.');
+      setFormError("Template title cannot be empty.");
       return;
     }
-    if (!trimmedContent) {
-      setFormError('Template content cannot be empty.');
+    if (!templateContent.trim()) {
+      setFormError("Template content cannot be empty.");
       return;
     }
 
@@ -210,19 +207,19 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
           title: trimmedTitle,
           category: resolvedCategory,
           description: formDescription.trim(),
-          content: trimmedContent,
+          content: templateContent,
         });
 
         if (res.success && res.data) {
           setTemplates((prev) =>
             prev.map((t) =>
-              (t.id || (t as any)._id) === targetId ? res.data! : t
-            )
+              (t.id || (t as any)._id) === targetId ? res.data! : t,
+            ),
           );
-          showToast('Template updated successfully', 'success');
+          showToast("Template updated successfully", "success");
           setIsModalOpen(false);
         } else {
-          setFormError(res.error || 'Failed to update template');
+          setFormError(res.error || "Failed to update template");
         }
       } else {
         // Create new template
@@ -230,19 +227,19 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
           title: trimmedTitle,
           category: resolvedCategory,
           description: formDescription.trim(),
-          content: trimmedContent,
+          content: templateContent,
         });
 
         if (res.success && res.data) {
           setTemplates((prev) => [res.data!, ...prev]);
-          showToast('Template created successfully', 'success');
+          showToast("Template created successfully", "success");
           setIsModalOpen(false);
         } else {
-          setFormError(res.error || 'Failed to create template');
+          setFormError(res.error || "Failed to create template");
         }
       }
     } catch (err: any) {
-      setFormError(err.message || 'An unexpected error occurred');
+      setFormError(err.message || "An unexpected error occurred");
     } finally {
       setIsSubmitting(false);
     }
@@ -257,14 +254,14 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
       const res = await api.deleteTemplate(targetId);
       if (res.success) {
         setTemplates((prev) =>
-          prev.filter((t) => (t.id || (t as any)._id) !== targetId)
+          prev.filter((t) => (t.id || (t as any)._id) !== targetId),
         );
-        showToast('Template deleted successfully', 'success');
+        showToast("Template deleted successfully", "success");
       } else {
-        showToast(res.error || 'Failed to delete template', 'error');
+        showToast(res.error || "Failed to delete template", "error");
       }
     } catch (err: any) {
-      showToast(err.message || 'Error deleting template', 'error');
+      showToast(err.message || "Error deleting template", "error");
     } finally {
       setIsDeleting(false);
       setDeletingTemplate(null);
@@ -273,79 +270,66 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
 
   // Handle Use Template
   const handleUseTemplate = (template: ITemplate) => {
-    // Put template content into existing composer draft
-    setDraft(template.content);
+    const resolvedContent = renderTemplate(template.content, currentContext);
+    setDraft(resolvedContent);
 
     if (onUseTemplate) {
-      onUseTemplate(template);
+      onUseTemplate({ ...template, content: resolvedContent });
     } else if (onNavigateTab) {
-      onNavigateTab('inquiries');
+      onNavigateTab("inquiries");
     }
 
     showToast(
-      activeInquiry
-        ? `Template "${template.title}" loaded into reply draft. Review before sending.`
-        : `Template loaded into composer. Select an inquiry to reply.`,
-      'success'
+      `Template "${template.title}" loaded into composer draft.`,
+      "success",
     );
   };
 
   // Copy template content to clipboard
   const handleCopyContent = (template: ITemplate) => {
-    navigator.clipboard.writeText(template.content);
+    const textToCopy = renderTemplate(template.content, currentContext);
+    navigator.clipboard.writeText(textToCopy);
     const tid = template.id || (template as any)._id;
     setCopiedId(tid);
-    showToast('Template copied to clipboard', 'info');
+    showToast("Template copied to clipboard", "info");
     setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  // Load starter example template into create modal
-  const handleLoadStarterExample = (example: typeof NEUTRAL_STARTER_EXAMPLES[0]) => {
-    setEditingTemplate(null);
-    setFormTitle(example.title);
-    setFormCategory(example.category);
-    setFormCustomCategory('');
-    setFormDescription(example.description);
-    setFormContent(example.content);
-    setFormError('');
-    setIsModalOpen(true);
   };
 
   // Helper for category badge color styling
   const getCategoryBadgeClass = (category: string) => {
     switch (category) {
-      case 'First Response':
-        return 'bg-violet-50 text-violet-700 border-violet-200';
-      case 'Follow-up':
-        return 'bg-sky-50 text-sky-700 border-sky-200';
-      case 'Pricing':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      case 'Project Details':
-        return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'Revision':
-        return 'bg-purple-50 text-purple-700 border-purple-200';
-      case 'Delivery':
-        return 'bg-teal-50 text-teal-700 border-teal-200';
-      case 'Thank You':
-        return 'bg-rose-50 text-rose-700 border-rose-200';
+      case "First Response":
+        return "bg-violet-50 text-violet-700 border-violet-200";
+      case "Follow-up":
+        return "bg-sky-50 text-sky-700 border-sky-200";
+      case "Pricing":
+        return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      case "Project Details":
+        return "bg-amber-50 text-amber-700 border-amber-200";
+      case "Revision":
+        return "bg-purple-50 text-purple-700 border-purple-200";
+      case "Delivery":
+        return "bg-teal-50 text-teal-700 border-teal-200";
+      case "Thank You":
+        return "bg-rose-50 text-rose-700 border-rose-200";
       default:
-        return 'bg-slate-100 text-slate-700 border-slate-200';
+        return "bg-slate-100 text-slate-700 border-slate-200";
     }
   };
 
   // Format date helper
   const formatTimestamp = (dateStr: string) => {
-    if (!dateStr) return '';
+    if (!dateStr) return "";
     try {
       const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return '';
+      if (isNaN(d.getTime())) return "";
       return d.toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
+        month: "short",
+        day: "numeric",
+        year: "numeric",
       });
     } catch {
-      return '';
+      return "";
     }
   };
 
@@ -363,7 +347,8 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
             </h1>
           </div>
           <p className="text-xs text-slate-500">
-            Create, manage, and use reusable message templates for rapid, professional client communications.
+            Create, manage, and use reusable message templates for rapid,
+            professional client communications.
           </p>
         </div>
 
@@ -391,7 +376,7 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
           />
           {searchQuery && (
             <button
-              onClick={() => setSearchQuery('')}
+              onClick={() => setSearchQuery("")}
               className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
             >
               <X className="w-3.5 h-3.5" />
@@ -402,31 +387,32 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
         {/* Category Filter Chips */}
         <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 max-w-full text-xs scrollbar-none">
           <button
-            onClick={() => setSelectedCategory('all')}
+            onClick={() => setSelectedCategory("all")}
             className={`px-3 py-1.5 rounded-xl font-semibold shrink-0 transition cursor-pointer ${
-              selectedCategory === 'all'
-                ? 'bg-violet-600 text-white shadow-2xs'
-                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              selectedCategory === "all"
+                ? "bg-violet-600 text-white shadow-2xs"
+                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
           >
             All ({templates.length})
           </button>
           {allCategories.map((cat) => {
             const count = templates.filter(
-              (t) => t.category?.toLowerCase() === cat.toLowerCase()
+              (t) => t.category?.toLowerCase() === cat.toLowerCase(),
             ).length;
-            const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
+            const isSelected =
+              selectedCategory.toLowerCase() === cat.toLowerCase();
             return (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
                 className={`px-3 py-1.5 rounded-xl font-semibold shrink-0 transition cursor-pointer ${
                   isSelected
-                    ? 'bg-violet-600 text-white shadow-2xs'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? "bg-violet-600 text-white shadow-2xs"
+                    : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
                 }`}
               >
-                {cat} {count > 0 ? `(${count})` : ''}
+                {cat} {count > 0 ? `(${count})` : ""}
               </button>
             );
           })}
@@ -449,23 +435,23 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
               <LayoutTemplate className="w-6 h-6" />
             </div>
             <h3 className="text-base font-bold text-slate-900">
-              {searchQuery || selectedCategory !== 'all'
-                ? 'No templates match your search'
-                : 'No Templates Saved Yet'}
+              {searchQuery || selectedCategory !== "all"
+                ? "No templates match your search"
+                : "No Templates Saved Yet"}
             </h3>
             <p className="text-xs text-slate-500 leading-relaxed">
-              {searchQuery || selectedCategory !== 'all'
-                ? 'Try adjusting your search terms or clearing the category filter.'
-                : 'Save your frequently used replies, client follow-ups, and project agreements to respond to new inquiries in seconds.'}
+              {searchQuery || selectedCategory !== "all"
+                ? "Try adjusting your search terms or clearing the category filter."
+                : "Save your frequently used replies, client follow-ups, and project agreements to respond to new inquiries in seconds."}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-3">
-            {searchQuery || selectedCategory !== 'all' ? (
+            {searchQuery || selectedCategory !== "all" ? (
               <button
                 onClick={() => {
-                  setSearchQuery('');
-                  setSelectedCategory('all');
+                  setSearchQuery("");
+                  setSelectedCategory("all");
                 }}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition cursor-pointer"
               >
@@ -481,38 +467,6 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
               </button>
             )}
           </div>
-
-          {/* Starter Suggestions (Profession-Neutral Examples) */}
-          {templates.length === 0 && !searchQuery && (
-            <div className="border-t border-slate-100 pt-6 mt-6 max-w-3xl mx-auto space-y-3 text-left">
-              <div className="text-xs font-bold text-slate-700 flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-violet-600" />
-                <span>Quick-Start Ideas (Click any example to inspect and customize):</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {NEUTRAL_STARTER_EXAMPLES.map((example, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => handleLoadStarterExample(example)}
-                    className="p-3.5 bg-slate-50 hover:bg-violet-50/50 border border-slate-200 hover:border-violet-300 rounded-xl cursor-pointer transition space-y-2 group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700">
-                        {example.category}
-                      </span>
-                      <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-violet-600 transition" />
-                    </div>
-                    <div className="text-xs font-bold text-slate-900 group-hover:text-violet-700 transition">
-                      {example.title}
-                    </div>
-                    <p className="text-[11px] text-slate-500 line-clamp-2">
-                      {example.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       ) : (
         /* Template Cards Grid */
@@ -531,10 +485,10 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
                   <div className="flex items-center justify-between gap-2">
                     <span
                       className={`text-[10px] font-bold font-mono px-2.5 py-0.5 rounded-full border ${getCategoryBadgeClass(
-                        template.category
+                        template.category,
                       )}`}
                     >
-                      {template.category || 'Custom'}
+                      {template.category || "Custom"}
                     </span>
 
                     <div className="flex items-center space-x-1">
@@ -580,15 +534,21 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
                 </div>
 
                 {/* Body: Content Preview Box */}
-                <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3 text-xs text-slate-700 font-sans leading-relaxed whitespace-pre-wrap line-clamp-5 max-h-36 overflow-y-auto">
-                  {template.content}
+                <div className="space-y-1.5">
+                  <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3 text-xs text-slate-700 font-sans leading-relaxed whitespace-pre-wrap line-clamp-5 max-h-36 overflow-y-auto">
+                    {renderTemplate(template.content, currentContext)}
+                  </div>
                 </div>
 
                 {/* Bottom Bar: Timestamp & Use Template CTA */}
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
                   <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
                     <Clock className="w-3 h-3 text-slate-400" />
-                    <span>{formatTimestamp(template.updatedAt || template.createdAt)}</span>
+                    <span>
+                      {formatTimestamp(
+                        template.updatedAt || template.createdAt,
+                      )}
+                    </span>
                   </div>
 
                   <button
@@ -614,16 +574,20 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
             <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center space-x-2">
                 <div className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center font-bold">
-                  {editingTemplate ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  {editingTemplate ? (
+                    <Edit2 className="w-4 h-4" />
+                  ) : (
+                    <Plus className="w-4 h-4" />
+                  )}
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-slate-900">
-                    {editingTemplate ? 'Edit Template' : 'Create AI Template'}
+                    {editingTemplate ? "Edit Template" : "Create AI Template"}
                   </h2>
                   <p className="text-[11px] text-slate-500">
                     {editingTemplate
-                      ? 'Modify your saved template details and content'
-                      : 'Define a reusable response pattern for future client conversations'}
+                      ? "Modify your saved template details and content"
+                      : "Define a reusable response pattern for future client conversations"}
                   </p>
                 </div>
               </div>
@@ -637,7 +601,10 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSubmitForm} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
+            <form
+              onSubmit={handleSubmitForm}
+              className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1"
+            >
               {formError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium">
                   {formError}
@@ -679,7 +646,7 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
               </div>
 
               {/* Custom category input if 'Custom' selected */}
-              {formCategory === 'Custom' && (
+              {formCategory === "Custom" && (
                 <div>
                   <label className="text-[11px] font-bold text-slate-700 block mb-1">
                     Custom Category Name
@@ -697,7 +664,8 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
               {/* Description (Optional) */}
               <div>
                 <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                  Short Purpose / Description <span className="font-normal text-slate-400">(Optional)</span>
+                  Short Purpose / Description{" "}
+                  <span className="font-normal text-slate-400">(Optional)</span>
                 </label>
                 <input
                   type="text"
@@ -708,23 +676,26 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
                 />
               </div>
 
-              {/* Content Textarea */}
+              {/* Template Content Editor */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-[11px] font-bold text-slate-700">
-                    Template Content *
-                  </label>
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-2">
+                  <span className="text-xs font-bold text-slate-700">
+                    Template Content
+                  </span>
+
                   <span className="text-[10px] font-mono text-slate-400">
                     {formContent.length} chars
                   </span>
                 </div>
+
                 <textarea
+                  ref={contentTextareaRef}
                   rows={8}
                   required
-                  placeholder="Write your reusable message template here. You can use placeholders like [Client Name] or [Project Scope]..."
+                  placeholder="Write your reusable message template here."
                   value={formContent}
                   onChange={(e) => setFormContent(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-violet-500 leading-relaxed resize-y font-sans transition"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-violet-500 leading-relaxed resize-y font-mono transition"
                 />
               </div>
 
@@ -751,7 +722,9 @@ export const AITemplatesPage: React.FC<AITemplatesPageProps> = ({
                   ) : (
                     <>
                       <Check className="w-3.5 h-3.5" />
-                      <span>{editingTemplate ? 'Update Template' : 'Save Template'}</span>
+                      <span>
+                        {editingTemplate ? "Update Template" : "Save Template"}
+                      </span>
                     </>
                   )}
                 </button>
