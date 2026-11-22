@@ -9,7 +9,8 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "tsx test/productionHardening.test.ts"
+    "test": "tsx test/productionHardening.test.ts",
+    "verify": "npm run test && npm run build && npm run lint"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -27,7 +28,7 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^6.2.3",
-    "zod": "^4.4.3 "
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",

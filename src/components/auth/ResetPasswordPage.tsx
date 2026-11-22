@@ -2,6 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, Lock, Eye, EyeOff, RefreshCw, AlertCircle, ArrowRight, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { api } from '../../api/client';
 
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      [elementName: string]: any;
+    }
+  }
+}
+
 interface ResetPasswordPageProps {
   initialToken?: string;
   initialEmail?: string;
@@ -11,7 +19,7 @@ interface ResetPasswordPageProps {
   isLoading?: boolean;
 }
 
-export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
+export const ResetPasswordPage = ({
   initialToken,
   initialEmail,
   onResetPassword,
@@ -67,7 +75,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
           setTokenValid(true);
         } else {
           setTokenValid(false);
-          setTokenError(res.error || res.data?.message || 'This password reset link is invalid, expired, or has already been used.');
+          setTokenError(res.error || 'This password reset link is invalid, expired, or has already been used.');
         }
       } catch (err: any) {
         setTokenValid(false);
@@ -80,7 +88,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
     validateLink();
   }, [token, email]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -244,7 +252,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
                     id="reset-new-password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
-                    onChange={(e) => {
+                    onChange={(e: { target: { value: string } }) => {
                       setPassword(e.target.value);
                       if (errorMessage) setErrorMessage('');
                     }}
@@ -257,7 +265,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
                   <button
                     type="button"
                     id="btn-toggle-reset-password"
-                    onClick={() => setShowPassword((prev) => !prev)}
+                    onClick={() => setShowPassword((prev: boolean) => !prev)}
                     disabled={isBusy}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600 focus:text-violet-600 focus:outline-none rounded-lg transition cursor-pointer disabled:cursor-not-allowed"
@@ -284,7 +292,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
                     id="reset-confirm-password"
                     type={showConfirmPassword ? 'text' : 'password'}
                     value={confirmPassword}
-                    onChange={(e) => {
+                    onChange={(e: { target: { value: string } }) => {
                       setConfirmPassword(e.target.value);
                       if (errorMessage) setErrorMessage('');
                     }}
@@ -297,7 +305,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
                   <button
                     type="button"
                     id="btn-toggle-reset-confirm-password"
-                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    onClick={() => setShowConfirmPassword((prev: boolean) => !prev)}
                     disabled={isBusy}
                     aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600 focus:text-violet-600 focus:outline-none rounded-lg transition cursor-pointer disabled:cursor-not-allowed"
